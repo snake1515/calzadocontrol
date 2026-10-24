@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Gastos{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Gastos y servicios</h1><p>Arriendo, energía, agua, gas, internet, fletes, publicidad, contador… todo lo que no es material, nómina ni máquina. Se restan de la ganancia.</p></div>
+  <div class="actions">
+    <form class="filters" method="get">
+      <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
+      <div class="field"><label>Hasta</label><input class="input" type="date" name="hasta" value="{{ hasta }}"></div>
+      <div class="field"><label>Categoría</label><select class="input" name="categoria"><option value="">Todas</option>{% for c in categorias %}<option {{ 'selected' if c == cat }}>{{ c }}</option>{% endfor %}</select></div>
+      <button class="btn sec">Filtrar</button>
+    </form>
+    <a class="btn" href="{{ url_for('gasto_form') }}">＋ Registrar gasto</a>
+  </div>
+</div>
+<div class="grid g-main">
+  <div class="card">
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th class="num">Valor</th><th></th></tr></thead>
+      <tbody>
+      {% for g in items %}
+        <tr>
+          <td>{{ g.fecha.strftime('%d/%m/%Y') }}</td>
+          <td><span class="badge {{ 'berry' if g.categoria == 'Publicidad' else '' }}">{{ g.categoria }}</span></td>
+          <td>{{ g.descripcion or '—' }}</td>
+          <td class="num"><b>{{ g.valor|cop }}</b></td>
+          <td class="r" style="white-space:nowrap">
+            <a class="btn sec sm" href="{{ url_for('gasto_form', id=g.id) }}">Editar</a>
+            <form method="post" action="{{ url_for('gasto_eliminar', id=g.id) }}" style="display:inline" onsubmit="return confirm('¿Eliminar este gasto?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn-icon" title="Eliminar">✕</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}<tr><td colspan="5" class="empty">No hay gastos en este periodo.</td></tr>{% endfor %}
+      </tbody>
+      {% if items %}<tfoot><tr><td colspan="3">Total</td><td class="num">{{ total|cop }}</td><td></td></tr></tfoot>{% endif %}
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Por categoría</h2><span class="badge">{{ total|cop }}</span></div>
+    {% for c, v in por_cat %}
+      <div class="sum-line"><span>{{ c }}</span><b>{{ v|cop }}</b></div>
+      <div class="bar {{ 'berry' if c == 'Publicidad' }}" style="margin:-2px 0 4px"><span style="width:{{ ((v / total * 100) if total else 0)|round(1) }}%"></span></div>
+    {% else %}<p class="hint">Sin gastos registrados.</p>{% endfor %}
+    {% if nomina_gasto > 0.5 %}
+    <div class="sum-line" style="margin-top:10px;border-top:1px solid var(--line)"><span>Nómina del periodo<br><small>Sueldos, aportes y prestaciones (sin destajo) · <a href="{{ url_for('nominas', desde=desde, hasta=hasta) }}">Ver nómina</a></small></span><b>{{ nomina_gasto|cop }}</b></div>
+    {% endif %}
+    <div class="actions" style="margin-top:14px">
+      {% for c in ['Energía eléctrica', 'Agua y alcantarillado', 'Arriendo'] %}<a class="btn sec sm" href="{{ url_for('gasto_form', categoria=c) }}">＋ {{ c }}</a>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

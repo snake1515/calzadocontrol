@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Nómina {{ p.numero }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Nómina {{ p.numero }} · {{ p.empleado.nombre }} {% if p.anulada %}<span class="badge err">Anulada</span>{% endif %}</h1>
+    <p>Periodo {{ p.desde|fecha }} al {{ p.hasta|fecha }} ({{ p.dias }} días) · pagado {{ p.fecha_pago|fecha }} · {{ p.metodo }}{% if p.usuario %} · registró {{ p.usuario.nombre }}{% endif %}</p></div>
+  <div class="actions">
+    <a class="btn sec" href="{{ url_for('nominas') }}">← Nómina</a>
+    <a class="btn sec" href="{{ url_for('nomina_pdf', id=p.id) }}" target="_blank">Ver desprendible</a>
+    <a class="btn" href="{{ url_for('nomina_pdf', id=p.id, descargar=1) }}">⇣ Descargar PDF</a>
+  </div>
+</div>
+<div class="grid g-main">
+  <div>
+    <div class="grid g2">
+      <div class="card">
+        <div class="card-head"><h2>Devengado</h2></div>
+        <div class="sum-line"><span>Salario básico</span><b>{{ p.basico|cop }}</b></div>
+        <div class="sum-line"><span>Auxilio de transporte</span><b>{{ p.aux_transporte|cop }}</b></div>
+        <div class="sum-line"><span>Destajo</span><b>{{ p.destajo|cop }}</b></div>
+        <div class="sum-line"><span>Horas extra / recargos</span><b>{{ p.horas_extra|cop }}</b></div>
+        <div class="sum-line"><span>Bonificaciones</span><b>{{ p.bonificaciones|cop }}</b></div>
+        <div class="sum-total"><span>Total</span><span>{{ p.devengado|cop }}</span></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Deducciones</h2></div>
+        <div class="sum-line"><span>Salud 4%</span><b>{{ p.deduccion_salud|cop }}</b></div>
+        <div class="sum-line"><span>Pensión 4%</span><b>{{ p.deduccion_pension|cop }}</b></div>
+        <div class="sum-line"><span>{{ p.deducciones_detalle or 'Otras' }}</span><b>{{ p.otras_deducciones|cop }}</b></div>
+        <div class="sum-total"><span>Total</span><span>{{ p.deducciones|cop }}</span></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><h2>Destajo liquidado</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Lote</th><th>Proceso</th><th>Detalle</th><th class="num">Valor</th></tr></thead>
+        <tbody>{% for l in p.lineas_destajo %}
+          <tr><td>{{ l.produccion.fecha|fecha }}</td><td><a href="{{ url_for('produccion_detalle', id=l.produccion_id) }}">#{{ l.produccion_id }}</a> <small>{{ l.produccion.producto.etiqueta }}</small></td><td>{{ l.proceso }}</td><td><small>{{ l.detalle }}</small></td><td class="num">{{ l.total|cop }}</td></tr>
+        {% else %}<tr><td colspan="5" class="empty">Sin destajo en este pago.</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Resumen</h2></div>
+    <div class="sum-total" style="margin-top:0;border-top:0"><span>Neto pagado</span><span>{{ p.neto|cop }}</span></div>
+    <div class="sum-line"><span>Aportes del empleador</span><b>{{ p.aportes|cop }}</b></div>
+    <div class="sum-line"><span>Provisión de prestaciones</span><b>{{ p.provisiones|cop }}</b></div>
+    <div class="sum-line"><span>Costo total empresa</span><b>{{ p.costo_empresa|cop }}</b></div>
+    <div class="sum-line"><span>Gasto de nómina en reportes<br><small>(sin el destajo, que ya está en el costo del par)</small></span><b>{{ p.gasto|cop }}</b></div>
+    {% if p.nota %}<p class="hint">Nota: {{ p.nota }}</p>{% endif %}
+    {% if not p.anulada %}
+    <form method="post" action="{{ url_for('nomina_anular', id=p.id) }}" style="margin-top:14px" onsubmit="return confirm('¿Anular esta nómina? El destajo vuelve a quedar pendiente.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm">Anular nómina</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

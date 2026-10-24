@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Producción{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Producción</h1><p>Lotes terminados, su corrida y lo que costó cada par</p></div>
+  <div class="actions">
+    <form class="filters" method="get">
+      <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
+      <div class="field"><label>Hasta</label><input class="input" type="date" name="hasta" value="{{ hasta }}"></div>
+      <button class="btn sec">Filtrar</button>
+    </form>
+    <a class="btn sec" href="{{ url_for('preparaciones') }}">◍ Semielaborados</a>
+    <a class="btn" href="{{ url_for('produccion_nueva') }}">⚙ Registrar producción</a>
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Pares producidos</div><div class="val">{{ unidades|num }}</div><div class="sub">{{ (unidades / 12)|num(1) }} docenas</div></div>
+  <div class="kpi"><div class="lbl">Costo total</div><div class="val">{{ costo|cop }}</div></div>
+  <div class="kpi"><div class="lbl">Mano de obra</div><div class="val">{{ mo|cop }}</div><div class="sub">{{ ((mo / unidades) if unidades else 0)|cop }} por par</div></div>
+  <div class="kpi hl"><div class="lbl">Costo promedio por par</div><div class="val">{{ ((costo / unidades) if unidades else 0)|cop }}</div></div>
+</div>
+<div class="card">
+  <div class="table-wrap"><table>
+    <thead><tr><th>Fecha</th><th>Referencia</th><th>Corrida</th><th class="num">Pares</th><th class="num">Materiales</th><th class="num">Mano obra</th><th class="num">Indirectos</th><th class="num">Total</th><th class="num">C/par</th><th></th></tr></thead>
+    <tbody>
+    {% for p in items %}
+      <tr class="{{ 'anulada' if p.anulada }}">
+        <td><a href="{{ url_for('produccion_detalle', id=p.id) }}">{{ p.fecha|fecha }}</a></td>
+        <td><b>{{ p.producto.etiqueta }}</b>{% if p.anulada %} <span class="badge err">Anulada</span>{% endif %}{% if p.nota %}<br><small>{{ p.nota }}</small>{% endif %}</td>
+        <td><small>{{ p.corrida_txt }}</small></td>
+        <td class="num">{{ p.cantidad|num }}</td>
+        <td class="num">{{ p.costo_insumos|cop }}</td>
+        <td class="num">{{ p.costo_mano_obra|cop }}</td>
+        <td class="num">{{ p.costo_indirectos|cop }}</td>
+        <td class="num"><b>{{ p.costo_total|cop }}</b></td>
+        <td class="num">{{ p.costo_unitario|cop }}</td>
+        <td class="r">{% if not p.anulada %}<a class="btn sec sm" href="{{ url_for('produccion_editar', id=p.id) }}">Editar</a>{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="10" class="empty">No hay producción en este periodo.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

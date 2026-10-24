@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+<style>
+  .chips-f { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chip-f { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 6px 12px; font-weight: 700; font-size: .85rem; color: var(--ink); text-decoration: none !important; }
+  .chip-f.on { background: var(--nav); color: #fff; border-color: var(--nav); }
+  .chip-f b { margin-left: 4px; }
+  @media (max-width: 820px) {
+    .cli-table thead { display: none; }
+    .cli-table tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .cli-table td { display: block; border: 0; padding: 2px 0; text-align: left !important; }
+    .cli-table td[data-l]::before { content: attr(data-l) ": "; color: var(--muted); font-size: .84rem; }
+  }
+</style>
+<div class="page-head">
+  <div><h1>Clientes</h1><p>Almacenes, distribuidores y personas que te compran: quién compra más, quién se está quedando y quién debe.</p></div>
+  <div class="actions">
+    <form class="filters" method="get"><input class="input" name="q" value="{{ q }}" placeholder="Buscar cliente, teléfono o ciudad…" style="min-width:0;flex:1 1 220px"><input type="hidden" name="estado" value="{{ estado }}"><button class="btn sec sm">Buscar</button></form>
+    <a class="btn" href="{{ url_for('cliente_form') }}">＋ Nuevo cliente</a>
+  </div>
+</div>
+
+<div class="chips-f">
+  <a class="chip-f {{ 'on' if not estado }}" href="{{ url_for('clientes', q=q) }}">Todos<b>{{ total }}</b></a>
+  <a class="chip-f {{ 'on' if estado == 'activo' }}" href="{{ url_for('clientes', q=q, estado='activo') }}">Activos<b>{{ cuenta.activo }}</b></a>
+  <a class="chip-f {{ 'on' if estado == 'riesgo' }}" href="{{ url_for('clientes', q=q, estado='riesgo') }}">Se están quedando<b>{{ cuenta.riesgo }}</b></a>
+  <a class="chip-f {{ 'on' if estado == 'inactivo' }}" href="{{ url_for('clientes', q=q, estado='inactivo') }}">Inactivos<b>{{ cuenta.inactivo }}</b></a>
+  <a class="chip-f {{ 'on' if estado == 'debe' }}" href="{{ url_for('clientes', q=q, estado='debe') }}">Con saldo<b>{{ cuenta.debe }}</b></a>
+  <a class="chip-f {{ 'on' if estado == 'vencido' }}" href="{{ url_for('clientes', q=q, estado='vencido') }}">Con vencidos<b>{{ cuenta.vencido }}</b></a>
+</div>
+
+<div class="card">
+  <div class="table-wrap"><table class="cli-table">
+    <thead><tr><th>#</th><th>Cliente</th><th class="num">Últimos 90 días</th><th class="num">Tendencia</th><th>Última compra</th><th>Estado</th><th class="num">Debe</th><th></th></tr></thead>
+    <tbody>
+    {% for f in filas %}{% set c = f.c %}
+      <tr>
+        <td class="muted">{{ loop.index }}</td>
+        <td><a href="{{ url_for('cliente_detalle', id=c.id) }}"><b>{{ c.nombre }}</b></a><br><small class="muted">{{ c.tipo or '' }}{% if c.ciudad %} · {{ c.ciudad }}{% endif %}{% if c.telefono %} · {{ c.telefono }}{% endif %}{% if c.usa_precio_mayor %} · precio por mayor{% endif %}</small></td>
+        <td class="num" data-l="Últimos 90 días"><b>{{ f.v90|cop }}</b><br><small class="muted">{{ f.u90|num }} pares</small></td>
+        <td class="num" data-l="Tendencia">{% if f.tendencia is none %}<span class="muted">—</span>{% elif f.tendencia >= 0 %}<span class="pos">▲ {{ f.tendencia|num(0) }}%</span>{% else %}<span class="neg">▼ {{ (-f.tendencia)|num(0) }}%</span>{% endif %}</td>
+        <td data-l="Última compra">{% if f.ultima %}{{ f.ultima|fecha }}<br><small class="muted">{{ 'hoy' if f.dias == 0 else ('ayer' if f.dias == 1 else 'hace ' ~ f.dias ~ ' días') }}</small>{% else %}—{% endif %}</td>
+        <td data-l="Estado"><span class="badge {{ f.estado_cls }}">{{ f.estado_txt }}</span></td>
+        <td class="num" data-l="Debe">{% if f.saldo > 0.5 %}<b class="{{ 'neg' if f.vencido > 0.5 }}">{{ f.saldo|cop }}</b>{% if f.vencido > 0.5 %}<br><small class="neg">{{ f.vencido|cop }} vencido</small>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="r" style="white-space:nowrap">
+          {% if c.whatsapp %}<a class="btn sec sm" href="{{ c.whatsapp }}" target="_blank">WhatsApp</a>{% endif %}
+          <a class="btn sm" href="{{ url_for('venta_nueva', cliente=c.id) }}">Vender</a>
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="8" class="empty">No hay clientes con ese filtro. Agrega tu primer cliente o regístralo al hacer una venta.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <p class="hint" style="margin-top:10px"><b>Activo:</b> compra con su frecuencia normal · <b>Se está quedando:</b> pasó más tiempo del normal sin comprar, conviene llamarlo · <b>Inactivo:</b> hace mucho no compra. Ordenados por lo que compraron en los últimos 90 días.</p>
+</div>
+{% endblock %}

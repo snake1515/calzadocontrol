@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Egresos y ajustes{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Egresos y ajustes</h1><p>Materiales y pares que salieron de la bodega sin venderse: pérdidas, defectos, muestras y conteos físicos.</p></div>
+  <div class="actions">
+    <form class="filters" method="get">
+      <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
+      <div class="field"><label>Hasta</label><input class="input" type="date" name="hasta" value="{{ hasta }}"></div>
+      <button class="btn sec">Filtrar</button>
+    </form>
+    <a class="btn" href="{{ url_for('ajuste_nuevo') }}">⇡ Registrar egreso</a>
+  </div>
+</div>
+<div class="grid g-main">
+  <div class="card">
+    <div class="table-wrap"><table>
+      <thead><tr><th>Documento</th><th>Fecha</th><th>Motivo</th><th>Qué salió</th><th class="num">Valor</th><th></th></tr></thead>
+      <tbody>
+      {% for a in filas %}
+        <tr class="{{ 'anulada' if a.anulada }}">
+          <td><a href="{{ url_for('ajuste_detalle', id=a.id) }}"><b>{{ a.numero }}</b></a>{% if a.anulada %} <span class="badge err">Anulado</span>{% endif %}</td>
+          <td>{{ a.fecha.strftime('%d/%m/%Y') }}</td>
+          <td>{{ a.motivo }}{% if a.descripcion %}<br><small class="muted">{{ a.descripcion }}</small>{% endif %}</td>
+          <td><small>{% for it in a.items %}{{ it.cantidad|num(3) }} {{ 'und' if it.producto else it.unidad }} {{ it.nombre }}{{ ', ' if not loop.last }}{% endfor %}</small></td>
+          <td class="num">{{ a.total|cop }}</td>
+          <td class="r"><a class="btn sec sm" href="{{ url_for('ajuste_pdf', id=a.id) }}" target="_blank">PDF</a></td>
+        </tr>
+      {% else %}<tr><td colspan="6" class="empty">No hay egresos en este periodo.</td></tr>{% endfor %}
+      </tbody>
+      {% if filas %}<tfoot><tr><td colspan="4">Total del periodo (sin anulados)</td><td class="num">{{ total|cop }}</td><td></td></tr></tfoot>{% endif %}
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Por motivo</h2><span class="badge">{{ total|cop }}</span></div>
+    {% for m, v in por_motivo %}<div class="sum-line"><span>{{ m }}</span><b>{{ v|cop }}</b></div>
+    {% else %}<p class="hint">Sin egresos en el periodo.</p>{% endfor %}
+    <p class="hint" style="margin-top:10px">Este valor se resta de la ganancia neta como <b>Pérdidas de inventario</b> en el Resumen, Reportes y Distribución.</p>
+  </div>
+</div>
+{% endblock %}

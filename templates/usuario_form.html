@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if u else 'Nuevo' }} usuario{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ 'Editar usuario' if u else 'Nuevo usuario' }}</h1></div></div>
+<div class="card" style="max-width:560px">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+      <div class="field"><label>Nombre</label><input class="input" name="nombre" value="{{ request.form.nombre or (u.nombre if u) }}" required></div>
+      <div class="field"><label>Usuario (para entrar)</label><input class="input" name="username" value="{{ request.form.username or (u.username if u) }}" autocapitalize="none" required></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Rol</label><select class="input" name="rol">
+        {% set sel = request.form.rol or (u.rol if u else 'vendedor') %}
+        {% for k, v in ROLES.items() %}<option value="{{ k }}" {{ 'selected' if k == sel }}>{{ v }}</option>{% endfor %}
+      </select></div>
+      <div class="field"><label>{{ 'Nueva contraseña' if u else 'Contraseña' }}</label><input class="input" type="password" name="password" minlength="6" {{ '' if u else 'required' }} autocomplete="new-password">
+        {% if u %}<div class="hint">Déjala vacía para no cambiarla.</div>{% endif %}</div>
+    </div>
+    {% if u %}<div class="field"><label class="check"><input type="checkbox" name="activo" value="1" {{ 'checked' if u.activo }}> Usuario activo</label></div>{% endif %}
+    <div class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('usuarios') }}">Cancelar</a></div>
+  </form>
+</div>
+{% endblock %}

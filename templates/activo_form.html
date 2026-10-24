@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if a else 'Nueva' }} máquina{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ 'Editar máquina' if a else ('Registrar compra de máquina o herramienta' if origen == 'compras' else 'Nueva máquina o herramienta') }}</h1><p>Máquinas y herramientas que duran varios años: guarnecedora, troqueladora, desbastadora, hormas, compresor…</p></div></div>
+{% if origen == 'compras' and not a %}
+<div class="seg-tabs" style="margin-bottom:16px"><a href="{{ url_for('compra_nueva') }}">Materiales</a><a class="on">Máquina o herramienta</a></div>
+{% endif %}
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div class="card">
+      <div class="form-row">
+        <div class="field"><label>Nombre</label><input class="input" name="nombre" value="{{ request.form.nombre or (a.nombre if a else '') }}" placeholder="Ej: Máquina de coser poste (guarnecedora)" required></div>
+        <div class="field"><label>Fecha de compra</label><input class="input" type="date" name="fecha_compra" value="{{ request.form.fecha_compra or (a.fecha_compra.isoformat() if a else hoy) }}" max="{{ hoy }}" required></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Valor de compra ($)</label><input class="input" id="valor" type="number" step="any" min="0" name="valor" value="{{ request.form.valor or ('%g'|format(a.valor) if a else '') }}" required></div>
+        <div class="field"><label>Vida útil (meses)</label><input class="input" id="vida" type="number" step="1" min="1" name="vida_util_meses" value="{{ request.form.vida_util_meses or (a.vida_util_meses if a else '') }}" required>
+          <div class="hint">¿Cuánto crees que va a durar? Ej: guarnecedora 60, troqueles 24, hormas 36, compresor 60.</div></div>
+        <div class="field"><label>Valor residual ($)</label><input class="input" id="resid" type="number" step="any" min="0" name="valor_residual" value="{{ request.form.valor_residual or ('%g'|format(a.valor_residual) if a and a.valor_residual else '') }}" placeholder="0">
+          <div class="hint">Lo que valdría al final (venderlo usado). Si no sabes, déjalo en 0.</div></div>
+      </div>
+      <input type="hidden" name="origen" value="{{ origen }}">
+      <div class="field"><label>Proveedor</label><input class="input" name="proveedor" value="{{ request.form.proveedor or (a.proveedor or '' if a else '') }}" placeholder="Opcional: dónde se compró"></div>
+      <div class="field"><label>Descripción</label><input class="input" name="descripcion" value="{{ request.form.descripcion or (a.descripcion or '' if a else '') }}" placeholder="Opcional: marca, serial"></div>
+      <div class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('compras') if origen == 'compras' else url_for('activos') }}">Cancelar</a></div>
+    </div>
+    <div class="card summary">
+      <h2>Se recupera así</h2>
+      <div class="sum-line"><span>Cuota mensual</span><b id="cMes">$ 0</b></div>
+      <div class="sum-line"><span>Cuota diaria</span><b id="cDia">$ 0</b></div>
+      <div class="sum-line"><span>Total a recuperar</span><b id="cTot">$ 0</b></div>
+      <p class="hint" style="margin-top:10px">Esa cuota se resta de la ganancia en el Resumen y se separa antes de repartir la plata en Distribución.</p>
+    </div>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  const $ = id => document.getElementById(id);
+  function calc() {
+    const dep = Math.max(val($('valor')) - val($('resid')), 0), m = Math.max(val($('vida')), 0);
+    const mes = m ? dep / m : 0;
+    $('cMes').textContent = COP(mes); $('cDia').textContent = COP(mes * 12 / 365); $('cTot').textContent = COP(dep);
+  }
+  ['valor', 'vida', 'resid'].forEach(i => $(i).addEventListener('input', calc)); calc();
+</script>
+{% endblock %}

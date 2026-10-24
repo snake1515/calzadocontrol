@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Registrar elaboración{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Registrar elaboración de semielaborado</h1>
+  <p>Materiales usados + mano de obra + otros costos = costo real de cada unidad del semielaborado.</p></div></div>
+{% if not preps %}
+  <div class="note warn">Primero crea el semielaborado con su composición. <a href="{{ url_for('insumo_form', prep=1) }}">Crear semielaborado</a></div>
+{% else %}
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>1. ¿Qué preparaste?</h2></div>
+        <div class="form-row c4">
+          <div class="field"><label>Semielaborado</label><select class="input" name="insumo_id" id="prep" required>
+            <option value="">— Elegir —</option>{% for p in preps %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
+          </select></div>
+          <div class="field"><label>Tandas</label><input class="input" type="number" step="any" min="0" name="tandas" id="tandas" value="1">
+            <div class="hint" id="tandaHint"></div></div>
+          <div class="field"><label>Cantidad obtenida (<span id="uni">unidad</span>)</label><input class="input" type="number" step="any" min="0" name="cantidad" id="cant" required placeholder="Ej: 3">
+            <div class="hint">Se calcula con las tandas; cámbiala si te rindió más o menos.</div></div>
+          <div class="field"><label>Fecha</label><input class="input" type="date" name="fecha" id="fecha" max="{{ hoy }}" value="{{ hoy }}"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>2. Materiales utilizados</h2><button type="button" class="btn sec sm" id="fromRecipe">↻ Calcular según composición</button></div>
+        <p class="hint" id="recipeNote" style="margin:-4px 0 10px">Se llenan solos con la composición × cantidad. Ajústalos si usaste más o menos.</p>
+        <div class="table-wrap"><table class="lines">
+          <thead><tr><th>Material</th><th class="num">Cantidad usada</th><th>Unidad</th><th class="num">En bodega</th><th class="num">Costo</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table></div>
+        <button type="button" class="btn sec sm" id="add" style="margin-top:10px">＋ Agregar otro material</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>3. Otros costos (opcional)</h2></div>
+        <div class="form-row">
+          <div class="field"><label>Mano de obra ($)</label><input class="input" type="number" step="any" min="0" name="mano_obra" id="mo" placeholder="0"></div>
+          <div class="field"><label>Otros: gas, energía… ($)</label><input class="input" type="number" step="any" min="0" name="otros" id="ot" placeholder="0"></div>
+        </div>
+        <div class="field" id="otBox" style="display:none"><label>¿Qué son los otros costos?</label><input class="input" name="otros_descripcion" id="otDesc" placeholder="Ej: gas de la cocción"></div>
+        <div class="field"><label>Nota</label><input class="input" name="nota" id="nota" placeholder="Opcional"></div>
+      </div>
+    </div>
+    <div class="card summary">
+      <h2>Resultado</h2>
+      <div class="sum-line"><span>Materiales</span><b id="sIns">$ 0</b></div>
+      <div class="sum-line"><span>Mano de obra y otros</span><b id="sOtr">$ 0</b></div>
+      <div class="sum-total"><span>Costo total</span><span id="sTot">$ 0</span></div>
+      <div class="sum-line"><span>Costo por <span class="uTxt">unidad</span></span><b id="sUnit">$ 0</b></div>
+      <div id="stockWarn" class="note warn" style="display:none;margin-top:10px"></div>
+      <p class="hint">El semielaborado queda en Materiales con este costo y se descuenta cuando se producen pares.</p>
+      <button class="btn block" style="margin-top:12px">Registrar elaboración</button>
+      <a class="btn sec block" style="margin-top:8px" href="{{ url_for('preparaciones') }}">Cancelar</a>
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const PREPS = {{ preps|tojson }}, INS = {{ insumos|tojson }}, PRE = {{ prefill|tojson }}, PRESEL = {{ preseleccion|tojson }};
+const $ = id => document.getElementById(id);
+if ($('rows')) {
+  const rows = $('rows'), ins = id => INS.find(i => i.id == id), prep = () => PREPS.find(p => p.id == $('prep').value);
+  let editado = false;
+  const opts = sel => '<option value="">— Elegir —</option>' + INS.map(i => `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre}</option>`).join('');
+  function addRow(sel = '', cant = '', uni = '') {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="min-width:170px"><select class="input iSel" name="consumo_insumo[]">${opts(sel)}</select></td>
+      <td><input class="input r" type="number" step="any" min="0" name="consumo_cantidad[]" value="${cant}" style="min-width:80px"></td>
+      <td><select class="input uSel" name="consumo_unidad[]" style="min-width:72px"></select></td><td class="num st"></td><td class="num co">—</td><td><button type="button" class="btn-icon">✕</button></td>`;
+    const iSel = tr.querySelector('.iSel'), uSel = tr.querySelector('.uSel');
+    llenarUnidades(uSel, (ins(sel) || {}).unidad, uni);
+    iSel.addEventListener('change', () => llenarUnidades(uSel, (ins(iSel.value) || {}).unidad));
+    tr.querySelector('.btn-icon').onclick = () => { tr.remove(); editado = true; calc(); };
+    tr.querySelectorAll('input,select').forEach(e => e.addEventListener('input', () => { editado = true; calc(); }));
+    rows.appendChild(tr);
+  }
+  function desdeReceta() {
+    rows.innerHTML = '';
+    const p = prep(), q = val($('cant'));
+    if (p && p.receta.length) { p.receta.forEach(r => addRow(r.insumo_id, q > 0 ? +(r.cantidad * q).toFixed(4) : '', r.unidad)); $('recipeNote').textContent = 'Calculado para ' + NUM(q / (p.rinde || 1), 2) + ' tanda(s) = ' + NUM(q, 3) + ' ' + p.unidad + '. Ajústalo si usaste más o menos.'; }
+    else { addRow(); $('recipeNote').textContent = p ? 'Este semielaborado no tiene composición: agrega los materiales a mano.' : 'Elige el semielaborado y la cantidad.'; }
+    editado = false; calc();
+  }
+  function calc() {
+    let cIns = 0; const uso = {}, av = [];
+    rows.querySelectorAll('tr').forEach(tr => {
+      const i = ins(tr.querySelector('.iSel').value), u = tr.querySelector('.uSel').value;
+      const q = i ? conv(val(tr.querySelector('input')), u, i.unidad) : 0;
+      tr.querySelector('.st').textContent = i ? NUM(conv(i.stock, i.unidad, u), 2) + ' ' + (ABR[u] || u) : '';
+      tr.querySelector('.co').textContent = i ? COP(q * i.costo) : '—';
+      if (i) { cIns += q * i.costo; uso[i.id] = (uso[i.id] || 0) + q; }
+    });
+    for (const id in uso) { const i = ins(id); if (uso[id] > i.stock + 1e-9) av.push(`${i.nombre}: necesitas ${NUM(uso[id], 3)} y hay ${NUM(i.stock, 3)} ${i.unidad}`); }
+    const otr = val($('mo')) + val($('ot')), tot = cIns + otr, q = val($('cant')), p = prep();
+    $('sIns').textContent = COP(cIns); $('sOtr').textContent = COP(otr); $('sTot').textContent = COP(tot);
+    $('sUnit').textContent = q > 0 ? COP(tot / q) : '—';
+    document.querySelectorAll('.uTxt').forEach(e => e.textContent = p ? p.unidad : 'unidad'); $('uni').textContent = p ? p.unidad : 'unidad';
+    $('otBox').style.display = val($('ot')) > 0 ? '' : 'none'; $('otDesc').required = val($('ot')) > 0;
+    $('stockWarn').style.display = av.length ? '' : 'none'; $('stockWarn').innerHTML = '<b>No alcanza el inventario:</b><br>' + av.join('<br>');
+  }
+  const base = () => { if (!editado) desdeReceta(); else { $('recipeNote').innerHTML = '<b>Cambiaste la cantidad.</b> Pulsa «Calcular según composición» para actualizar.'; calc(); } };
+  function porTandas() {
+    const p = prep(); if (!p) return;
+    $('cant').value = +(val($('tandas')) * (p.rinde || 1)).toFixed(4);
+    $('tandaHint').textContent = '1 tanda rinde ' + NUM(p.rinde || 1, 3) + ' ' + p.unidad;
+    editado = false; desdeReceta();
+  }
+  $('prep').addEventListener('change', porTandas);
+  $('tandas').addEventListener('input', porTandas);
+  $('cant').addEventListener('input', base);
+  $('fromRecipe').onclick = desdeReceta;
+  $('add').onclick = () => { addRow(); editado = true; calc(); };
+  ['mo', 'ot'].forEach(i => $(i).addEventListener('input', calc));
+  if (PRE) {
+    const m = { insumo_id: 'prep', cantidad: 'cant', tandas: 'tandas', fecha: 'fecha', mano_obra: 'mo', otros: 'ot', otros_descripcion: 'otDesc', nota: 'nota' };
+    for (const k in m) if (PRE[k]) $(m[k]).value = PRE[k];
+    (PRE.consumos.length ? PRE.consumos : [{ insumo_id: '', cantidad: '' }]).forEach(c => addRow(c.insumo_id, c.cantidad, c.unidad));
+    editado = true; calc();
+  } else { if (PRESEL) $('prep').value = PRESEL; if (prep()) porTandas(); else desdeReceta(); }
+}
+</script>
+{% endblock %}

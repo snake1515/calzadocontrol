@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Nómina{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Nómina</h1><p>Pagos a empleados del {{ desde }} al {{ hasta }}</p></div>
+  <div class="actions">
+    <form class="filters" method="get">
+      <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
+      <div class="field"><label>Hasta</label><input class="input" type="date" name="hasta" value="{{ hasta }}"></div>
+      <button class="btn sec">Filtrar</button>
+    </form>
+    <a class="btn sec" href="{{ url_for('empleados') }}">☺ Empleados</a>
+    <a class="btn" href="{{ url_for('nomina_nueva') }}">＋ Liquidar nómina</a>
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Neto pagado</div><div class="val">{{ neto|cop }}</div></div>
+  <div class="kpi"><div class="lbl">Destajo</div><div class="val">{{ destajo|cop }}</div><div class="sub">ya incluido en el costo de los pares</div></div>
+  <div class="kpi"><div class="lbl">Costo total empresa</div><div class="val">{{ costo|cop }}</div><div class="sub">con aportes y prestaciones</div></div>
+  <div class="kpi hl"><div class="lbl">Gasto de nómina</div><div class="val">{{ gasto|cop }}</div><div class="sub">lo que se resta en reportes</div></div>
+</div>
+<div class="card">
+  <div class="table-wrap"><table>
+    <thead><tr><th>N.º</th><th>Fecha pago</th><th>Empleado</th><th>Periodo</th><th class="num">Básico + aux.</th><th class="num">Destajo</th><th class="num">Deducciones</th><th class="num">Neto</th><th class="num">Costo empresa</th><th></th></tr></thead>
+    <tbody>
+    {% for p in items %}
+      <tr class="{{ 'anulada' if p.anulada }}">
+        <td><a href="{{ url_for('nomina_detalle', id=p.id) }}">{{ p.numero }}</a></td>
+        <td>{{ p.fecha_pago|fecha }}</td>
+        <td><b>{{ p.empleado.nombre }}</b>{% if p.anulada %} <span class="badge err">Anulada</span>{% endif %}</td>
+        <td><small>{{ p.desde.strftime('%d/%m') }}–{{ p.hasta|fecha }} · {{ p.dias }} d</small></td>
+        <td class="num">{{ (p.basico + p.aux_transporte)|cop }}</td>
+        <td class="num">{{ p.destajo|cop }}</td>
+        <td class="num">{{ p.deducciones|cop }}</td>
+        <td class="num"><b>{{ p.neto|cop }}</b></td>
+        <td class="num">{{ p.costo_empresa|cop }}</td>
+        <td class="r"><a class="btn sec sm" href="{{ url_for('nomina_pdf', id=p.id) }}" target="_blank">PDF</a></td>
+      </tr>
+    {% else %}<tr><td colspan="10" class="empty">No hay pagos de nómina en este periodo.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

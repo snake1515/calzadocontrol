@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Datos del negocio{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Datos del negocio</h1><p>Lo que aparece en el encabezado de cada recibo de venta, egreso y desprendible de nómina.</p></div></div>
+<div class="grid g-main">
+  <div class="card">
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field"><label>Nombre del negocio</label><input class="input" name="nombre" value="{{ neg.nombre or '' }}" required></div>
+      <div class="form-row">
+        <div class="field"><label>NIT o cédula</label><input class="input" name="nit" value="{{ neg.nit or '' }}" placeholder="Opcional"></div>
+        <div class="field"><label>Teléfono / WhatsApp</label><input class="input" name="telefono" value="{{ neg.telefono or '' }}" placeholder="Opcional"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Dirección</label><input class="input" name="direccion" value="{{ neg.direccion or '' }}" placeholder="Opcional"></div>
+        <div class="field"><label>Ciudad</label><input class="input" name="ciudad" value="{{ neg.ciudad or '' }}" placeholder="Opcional"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Correo</label><input class="input" type="email" name="email" value="{{ neg.email or '' }}" placeholder="Opcional"></div>
+        <div class="field"><label>Régimen</label><input class="input" name="regimen" value="{{ neg.regimen or '' }}" placeholder="Ej: No responsable de IVA"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Título del documento</label><input class="input" name="titulo_doc" list="titulos" value="{{ neg.titulo_doc or 'Recibo de venta' }}">
+          <datalist id="titulos"><option value="Recibo de venta"><option value="Cuenta de cobro"><option value="Remisión"><option value="Comprobante de venta"></datalist></div>
+        <div class="field"><label>Prefijo de numeración</label><input class="input" name="prefijo" maxlength="8" value="{{ neg.prefijo or 'CZ' }}"><div class="hint">Ej: CZ-000123</div></div>
+        <div class="field"><label>IVA por defecto (%)</label><input class="input" type="number" step="any" min="0" max="100" name="iva_pct" value="{{ '%g'|format(neg.iva_pct or 0) }}"><div class="hint">0 si no eres responsable de IVA</div></div>
+      </div>
+      <div class="note" style="margin-bottom:14px">Estos documentos son soporte de la venta para el cliente; <b>no reemplazan la factura electrónica DIAN</b> cuando estés obligado a expedirla.</div>
+      <div class="field"><label>Mensaje al pie</label><input class="input" name="mensaje" value="{{ neg.mensaje or '' }}" placeholder="Ej: ¡Gracias por su compra!"></div>
+      <button class="btn">Guardar</button>
+    </form>
+  </div>
+  <div class="card summary">
+    <h2>Vista previa</h2>
+    {% if ultima %}
+      <p class="hint">Así se ve con la última venta ({{ num_doc(ultima) }}). Guarda primero para ver los cambios.</p>
+      <img src="{{ url_for('venta_comprobante', id=ultima.id, fmt='jpg') }}?v={{ range(100000)|random }}" alt="Vista previa del recibo" style="width:100%;border:1px solid var(--line);border-radius:10px;margin-top:8px">
+    {% else %}
+      <p class="hint">Cuando registres la primera venta verás aquí cómo queda el recibo.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if prod else 'Nueva' }} referencia{% endblock %}
+{% block content %}
+{% set F = request.form %}
+<div class="page-head"><div><h1>{{ 'Editar ' ~ prod.etiqueta if prod else 'Nueva referencia de calzado' }}</h1>
+  <p>Modelo + color, rango de tallas, ficha de consumo de materiales y tarifas de mano de obra por proceso.</p></div>
+  {% if prod %}<form method="post" action="{{ url_for('producto_duplicar', id=prod.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn sec">⧉ Crear otro color con esta ficha</button></form>{% endif %}
+</div>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>1. Datos de la referencia</h2></div>
+        <div class="form-row">
+          <div class="field"><label>Código / referencia</label><input class="input" name="codigo" value="{{ F.codigo or (prod.codigo or '' if prod) }}" placeholder="Ej: REF-205"></div>
+          <div class="field"><label>Nombre del modelo</label><input class="input" name="nombre" value="{{ F.nombre or (prod.nombre if prod) or '' }}" placeholder="Ej: Baleta clásica" required></div>
+          <div class="field"><label>Color</label><input class="input" name="color" value="{{ F.color or (prod.color or '' if prod) }}" placeholder="Ej: Negro"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Línea</label><select class="input" name="linea">{% set sel = F.linea or (prod.linea if prod else lineas[0]) %}{% for l in lineas %}<option {{ 'selected' if l == sel }}>{{ l }}</option>{% endfor %}</select></div>
+          <div class="field"><label>Material principal</label><input class="input" name="material" value="{{ F.material or (prod.material or '' if prod) }}" placeholder="Ej: Cuero napa / Sintético"></div>
+          <div class="field"><label>Talla desde</label><input class="input" type="number" min="15" max="50" step="1" name="talla_min" id="tmin" value="{{ F.talla_min or (prod.talla_min if prod else 35) }}" required></div>
+          <div class="field"><label>Talla hasta</label><input class="input" type="number" min="15" max="50" step="1" name="talla_max" id="tmax" value="{{ F.talla_max or (prod.talla_max if prod else 40) }}" required></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Precio al detal (par)</label><input class="input" type="number" step="any" min="0" name="precio_venta" id="precio" value="{{ F.precio_venta or ('%g'|format(prod.precio_venta) if prod else '') }}" required></div>
+          <div class="field"><label>Precio por mayor (par)</label><input class="input" type="number" step="any" min="0" name="precio_mayor" id="pmayor" value="{{ F.precio_mayor or ('%g'|format(prod.precio_mayor) if prod and prod.precio_mayor else '') }}" placeholder="Almacenes y distribuidores"></div>
+          <div class="field"><label>Stock mínimo (pares)</label><input class="input" type="number" step="1" min="0" name="stock_minimo" value="{{ F.stock_minimo or (prod.stock_minimo if prod else '') }}"></div>
+        </div>
+        <div class="field" style="margin-bottom:0"><label>Descripción</label><input class="input" name="descripcion" value="{{ F.descripcion or (prod.descripcion or '' if prod) }}" placeholder="Opcional · ej: suela TR, plantilla acolchada, horma 22"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>2. Ficha de consumo (materiales)</h2></div>
+        <div class="field" style="max-width:340px"><label>Esta ficha rinde (pares)</label>
+          <input class="input" type="number" step="any" min="1" name="tanda_rinde" id="rinde" value="{{ F.tanda_rinde or ('%g'|format(prod.tanda_rinde) if prod and prod.tanda_rinde else '1') }}">
+          <div class="hint">1 si la escribes por par · 12 si la escribes por docena · o lo que rinda tu tarea de corte.</div></div>
+        {% if not insumos %}<div class="note warn">Primero crea tus materiales. <a href="{{ url_for('insumo_form') }}">Crear material</a></div>{% endif %}
+        <div class="table-wrap"><table class="lines">
+          <thead><tr><th>Material</th><th class="num">Cantidad</th><th>Unidad</th><th class="num">Costo</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table></div>
+        <button type="button" class="btn sec sm" id="add" style="margin-top:10px">＋ Agregar material</button>
+        <p class="hint" style="margin-top:12px">Escribe cada material en la unidad cómoda: el cuero en pie² o dm², el hilo en metros, el pegante en galones o mililitros. La app convierte sola.</p>
+        <p class="hint" id="porUno"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>3. Mano de obra por proceso (destajo)</h2></div>
+        <p class="hint" style="margin:-6px 0 10px">Lo que pagas por <b>cada par</b> en cada proceso. Se usa para llenar sola la mano de obra al registrar producción y para el costo estándar.</p>
+        <div class="table-wrap"><table class="lines">
+          <thead><tr><th>Proceso</th><th class="num">Valor por par ($)</th><th class="num">Por docena</th><th></th></tr></thead>
+          <tbody id="procRows"></tbody>
+        </table></div>
+        <button type="button" class="btn sec sm" id="addProc" style="margin-top:10px">＋ Agregar proceso</button>
+        <datalist id="procList">{% for p in lista_procesos %}<option value="{{ p }}">{% endfor %}</datalist>
+      </div>
+
+      {% if not prod %}
+      <div class="card">
+        <div class="card-head"><h2>4. Inventario inicial (opcional)</h2></div>
+        <p class="hint" style="margin:-6px 0 10px">Si ya tienes pares terminados de esta referencia en bodega, escribe cuántos hay por talla.</p>
+        <div class="corrida" id="iniGrid"></div>
+        <div class="field" style="max-width:300px;margin-top:12px"><label>Costo por par ($)</label>
+          <input class="input" type="number" step="any" min="0" name="costo_inicial" placeholder="Vacío = costo estándar"></div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="card summary">
+      <h2>Costo estándar por par</h2>
+      <p class="hint">Materiales + mano de obra con los costos actuales</p>
+      <div class="big-num" id="costo">$ 0</div>
+      <div class="sum-line"><span>Materiales</span><b id="cMat">$ 0</b></div>
+      <div class="sum-line"><span>Mano de obra</span><b id="cMo">$ 0</b></div>
+      <div class="sum-line"><span>Precio al detal</span><b id="pv">$ 0</b></div>
+      <div class="sum-line"><span>Ganancia al detal</span><b id="gan">$ 0</b></div>
+      <div class="sum-line"><span>Ganancia por mayor</span><b id="ganM">—</b></div>
+      <div class="sum-line"><span>Margen al detal</span><b id="mar">0%</b></div>
+      <p class="hint">A esto se le suman los indirectos (energía, transporte…) al registrar cada producción.</p>
+      <button class="btn block" style="margin-top:12px">Guardar referencia</button>
+      <a class="btn sec block" style="margin-top:8px" href="{{ url_for('producto_detalle', id=prod.id) if prod else url_for('productos') }}">Cancelar</a>
+    </div>
+  </div>
+</form>
+{% if prod %}
+<form method="post" action="{{ url_for('producto_eliminar', id=prod.id) }}" style="margin-top:20px" onsubmit="return confirm('¿Eliminar esta referencia? Su historial se conserva.')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm">Eliminar referencia</button>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const INS = {{ insumos|tojson }};
+const RECETA = {{ receta|tojson }};
+const PROCS = {{ procesos|tojson }};
+const PROC_DEF = {{ lista_procesos|tojson }};
+const $ = id => document.getElementById(id);
+const rows = $('rows'), procRows = $('procRows');
+const byId = id => INS.find(i => i.id == id);
+function opts(sel) {
+  let h = '<option value="">— Elegir —</option>', g = null;
+  INS.forEach(i => { const gr = i.prep ? 'Semielaborados' : i.cat;
+    if (gr !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${gr}">`; g = gr; }
+    h += `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre}</option>`; });
+  return h + '</optgroup>';
+}
+function addRow(sel = '', cant = '', uni = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td style="min-width:190px"><select class="input iSel" name="receta_insumo[]">${opts(sel)}</select></td>
+    <td><input class="input r" type="number" step="any" min="0" name="receta_cantidad[]" value="${cant}" style="min-width:80px"></td>
+    <td><select class="input uSel" name="receta_unidad[]" style="min-width:80px"></select></td><td class="num co">—</td>
+    <td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
+  const iSel = tr.querySelector('.iSel'), uSel = tr.querySelector('.uSel');
+  llenarUnidades(uSel, (byId(sel) || {}).unidad, uni);
+  iSel.addEventListener('change', () => llenarUnidades(uSel, (byId(iSel.value) || {}).unidad));
+  tr.querySelector('.btn-icon').onclick = () => { tr.remove(); calc(); };
+  tr.querySelectorAll('input,select').forEach(e => e.addEventListener('input', calc));
+  rows.appendChild(tr); calc();
+}
+function addProc(nombre = '', valor = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td style="min-width:200px"><input class="input pN" name="proc_nombre[]" list="procList" value="${nombre}" placeholder="Ej: Guarnición (aparado)"></td>
+    <td><input class="input r pV" type="number" step="any" min="0" name="proc_valor[]" value="${valor}" style="min-width:100px"></td>
+    <td class="num pD">—</td><td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
+  tr.querySelector('.btn-icon').onclick = () => { tr.remove(); calc(); };
+  tr.querySelectorAll('input').forEach(e => e.addEventListener('input', calc));
+  procRows.appendChild(tr); calc();
+}
+function calc() {
+  let t = 0; const r = Math.max(val($('rinde')), 0) || 1, uno = [];
+  rows.querySelectorAll('tr').forEach(tr => {
+    const ins = byId(tr.querySelector('.iSel').value), q = val(tr.querySelector('input')), u = tr.querySelector('.uSel').value;
+    const base = ins ? conv(q, u, ins.unidad) : 0, c = ins ? base * ins.costo : 0; t += c;
+    tr.querySelector('.co').textContent = ins ? COP(c) : '—';
+    if (ins && q) uno.push(NUM(q / r, 4) + ' ' + (ABR[u] || u) + ' de ' + ins.nombre);
+  });
+  let mo = 0;
+  procRows.querySelectorAll('tr').forEach(tr => { const v = val(tr.querySelector('.pV')); mo += v; tr.querySelector('.pD').textContent = v ? COP(v * 12) : '—'; });
+  const mat = t / r, unit = mat + mo, pv = val($('precio')), pm = val($('pmayor'));
+  $('costo').textContent = COP(unit); $('cMat').textContent = COP(mat); $('cMo').textContent = COP(mo);
+  $('pv').textContent = COP(pv);
+  const g = pv - unit; $('gan').textContent = COP(g); $('gan').className = g >= 0 ? 'pos' : 'neg';
+  const gm = pm - unit; $('ganM').textContent = pm ? COP(gm) : '—'; $('ganM').className = gm >= 0 ? 'pos' : 'neg';
+  $('mar').textContent = pv ? NUM(g / pv * 100, 1) + '%' : '—';
+  $('porUno').innerHTML = r > 1 && uno.length ? '<b>Por cada par:</b> ' + uno.join(' · ') : '';
+}
+function gridInicial() {
+  const g = $('iniGrid'); if (!g) return;
+  const a = parseInt($('tmin').value) || 0, b = parseInt($('tmax').value) || 0, prev = {};
+  g.querySelectorAll('input[name="inicial_cant[]"]').forEach(i => prev[i.dataset.t] = i.value);
+  g.innerHTML = '';
+  if (!a || !b || b < a || b - a > 25) return;
+  for (let t = a; t <= b; t++) g.insertAdjacentHTML('beforeend',
+    `<div><label>T ${t}</label><input type="hidden" name="inicial_talla[]" value="${t}"><input class="input" type="number" min="0" step="1" name="inicial_cant[]" data-t="${t}" value="${prev[t] || ''}" placeholder="0"></div>`);
+}
+['precio', 'pmayor', 'rinde'].forEach(i => $(i).addEventListener('input', calc));
+['tmin', 'tmax'].forEach(i => $(i).addEventListener('input', gridInicial));
+$('add').onclick = () => addRow();
+$('addProc').onclick = () => addProc();
+if (RECETA.length) RECETA.forEach(r => addRow(r.insumo_id, r.cantidad, r.unidad)); else addRow();
+if (PROCS.length) PROCS.forEach(p => addProc(p.proceso, p.valor)); else PROC_DEF.slice(0, 5).forEach(p => addProc(p, ''));
+gridInicial();
+</script>
+{% endblock %}

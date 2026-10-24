@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Egreso {{ a.numero }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Egreso {{ a.numero }} {% if a.anulada %}<span class="badge err">Anulado</span>{% endif %}</h1>
+    <p>{{ a.fecha.strftime('%d/%m/%Y') }} · {{ a.motivo }}{% if a.usuario %} · registró {{ a.usuario.nombre }}{% endif %}</p></div>
+  <div class="actions">
+    <a class="btn sec" href="{{ url_for('ajustes') }}">← Volver</a>
+    <a class="btn sec" href="{{ url_for('ajuste_pdf', id=a.id) }}" target="_blank">Ver PDF</a>
+    <a class="btn" href="{{ url_for('ajuste_pdf', id=a.id, descargar=1) }}" download>⇣ Descargar PDF</a>
+  </div>
+</div>
+<div class="grid g-main">
+  <div class="card">
+    <div class="table-wrap"><table>
+      <thead><tr><th>Material o referencia</th><th class="num">En sistema</th><th class="num">Salió</th><th class="num">Costo unit.</th><th class="num">Costo total</th></tr></thead>
+      <tbody>{% for it in a.items %}{% set u = 'und' if it.producto else it.unidad %}
+        <tr><td><b>{{ it.nombre }}</b>{% if it.producto %} <span class="badge">Calzado</span>{% endif %}</td>
+          <td class="num muted">{{ (it.stock_antes|num(3) ~ ' ' ~ u) if it.stock_antes is not none else '—' }}</td>
+          <td class="num"><b>{{ it.cantidad|num(3) }} {{ u }}</b></td>
+          <td class="num">{{ it.costo_unitario|cop }}</td><td class="num">{{ it.costo_total|cop }}</td></tr>
+      {% endfor %}</tbody>
+      <tfoot><tr><td colspan="4">Valor del egreso</td><td class="num">{{ a.total|cop }}</td></tr></tfoot>
+    </table></div>
+    {% if a.descripcion %}<p class="hint" style="margin-top:10px">Descripción: {{ a.descripcion }}</p>{% endif %}
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Resumen</h2></div>
+    <div class="sum-line"><span>Motivo</span><b>{{ a.motivo }}</b></div>
+    <div class="sum-line"><span>Líneas</span><b>{{ a.items|length }}</b></div>
+    <div class="sum-total"><span>Valor</span><span>{{ a.total|cop }}</span></div>
+    <p class="hint">Se resta de la ganancia como pérdida de inventario.</p>
+    {% if puede('admin') and not a.anulada %}
+    <form method="post" action="{{ url_for('ajuste_anular', id=a.id) }}" style="margin-top:14px" onsubmit="return confirm('¿Anular este egreso? Las cantidades regresarán a la bodega.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm">Anular egreso</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

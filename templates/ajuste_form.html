@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Egreso por ajuste{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Egreso por ajuste</h1><p>Saca de la bodega materiales o pares que se perdieron, salieron defectuosos, se dieron como muestra o no aparecen en el conteo.</p></div></div>
+<form method="post" id="f">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div class="card">
+      <div class="form-row">
+        <div class="field"><label>Fecha</label><input class="input" type="date" name="fecha" max="{{ hoy }}" value="{{ request.form.fecha or hoy }}"></div>
+        <div class="field"><label>Motivo</label><select class="input" name="motivo" id="motivo">
+          {% set sel = request.form.motivo or 'Pérdida' %}{% for m in motivos %}<option {{ 'selected' if m == sel }}>{{ m }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="note" id="ayudaConteo" style="display:none;margin-bottom:12px">En <b>conteo físico</b> se escribe lo que <b>se contó en bodega</b>. La app calcula la diferencia con el sistema y saca solo lo que falta.</div>
+      <div class="table-wrap"><table class="lines">
+        <thead><tr><th>Material o referencia/talla</th><th class="num" id="thCant">Cantidad</th><th>Unidad</th><th class="num">En sistema</th><th class="num">Sale</th><th class="num">Costo</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      <button type="button" class="btn sec sm" id="add" style="margin-top:10px">＋ Agregar otra línea</button>
+      <div class="field" style="margin-top:16px"><label>Descripción <small class="muted" id="descReq">(opcional)</small></label>
+        <input class="input" name="descripcion" id="desc" value="{{ request.form.descripcion }}" placeholder="Ej: 2 pares talla 38 con defecto de pegue, se dañó medio galón de pegante"></div>
+    </div>
+    <div class="card summary">
+      <h2>Valor del egreso</h2>
+      <div class="big-num" id="tot">$ 0</div>
+      <p class="hint" id="cnt">0 líneas</p>
+      <div class="note warn" id="warn" style="display:none;margin-top:10px"></div>
+      <p class="hint" style="margin-top:10px">Se valoriza al costo promedio y se resta de la ganancia como <b>pérdida de inventario</b>.</p>
+      <button class="btn block" id="go" style="margin-top:12px">Registrar egreso</button>
+      <a class="btn sec block" style="margin-top:8px" href="{{ url_for('ajustes') }}">Cancelar</a>
+    </div>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const ITEMS = {{ items|tojson }}, PRE = {{ pre|tojson }};
+const $ = id => document.getElementById(id), rows = $('rows');
+const item = ref => ITEMS.find(i => i.ref === ref);
+const esConteo = () => $('motivo').value === {{ motivos[0]|tojson }};
+function opts(sel) {
+  let h = '<option value="">— Elegir —</option>', g = null;
+  ITEMS.forEach(i => {
+    if (i.grupo !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${i.grupo}">`; g = i.grupo; }
+    h += `<option value="${i.ref}" ${i.ref === sel ? 'selected' : ''}>${i.nombre}</option>`;
+  });
+  return h + '</optgroup>';
+}
+function addRow(sel = '', cant = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td style="min-width:160px"><select class="input iSel" name="item[]">${opts(sel)}</select></td>
+    <td><input class="input r" type="number" step="any" min="0" name="cantidad[]" value="${cant}" style="min-width:72px;max-width:110px"></td>
+    <td><select class="input uSel" name="unidad[]" style="min-width:64px"></select></td>
+    <td class="num st">—</td><td class="num sa">—</td><td class="num co">—</td>
+    <td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
+  const iSel = tr.querySelector('.iSel'), uSel = tr.querySelector('.uSel');
+  const fill = () => llenarUnidades(uSel, (item(iSel.value) || {}).unidad || 'unidad');
+  fill();
+  iSel.addEventListener('change', () => { fill(); calc(); });
+  tr.querySelector('.btn-icon').onclick = () => { tr.remove(); calc(); };
+  tr.querySelectorAll('input,select').forEach(e => e.addEventListener('input', calc));
+  rows.appendChild(tr); calc();
+}
+function calc() {
+  const conteo = esConteo();
+  $('thCant').textContent = conteo ? 'Se contó' : 'Cantidad';
+  $('ayudaConteo').style.display = conteo ? '' : 'none';
+  const otro = $('motivo').value === 'Otro';
+  $('descReq').textContent = otro ? '(obligatoria)' : '(opcional)';
+  $('desc').required = otro;
+  let t = 0, c = 0; const w = [];
+  rows.querySelectorAll('tr').forEach(tr => {
+    const i = item(tr.querySelector('.iSel').value), u = tr.querySelector('.uSel').value;
+    const inp = tr.querySelector('input'), txt = inp.value.trim();
+    const st = tr.querySelector('.st'), sa = tr.querySelector('.sa'), co = tr.querySelector('.co');
+    if (!i) { st.textContent = sa.textContent = co.textContent = '—'; return; }
+    const ab = ABR[u] || u;
+    st.textContent = NUM(conv(i.stock, i.unidad, u), 3) + ' ' + ab;
+    if (!txt) { sa.textContent = co.textContent = '—'; return; }
+    const q = conv(val(inp), u, i.unidad);
+    let sale = conteo ? i.stock - q : q;
+    if (sale < -1e-9) w.push(conteo ? `${i.nombre}: se contó más de lo que dice el sistema. Eso se registra como compra.` : '');
+    else if (sale > i.stock + 1e-9) w.push(`${i.nombre}: solo hay ${NUM(conv(i.stock, i.unidad, u), 3)} ${ab}.`);
+    sale = Math.max(sale, 0);
+    sa.innerHTML = `<b>${NUM(conv(sale, i.unidad, u), 3)} ${ab}</b>`;
+    co.textContent = COP(sale * i.costo);
+    t += sale * i.costo; if (sale > 0) c++;
+  });
+  $('tot').textContent = COP(t);
+  $('cnt').textContent = c + (c === 1 ? ' línea' : ' líneas');
+  const ww = w.filter(Boolean);
+  $('warn').style.display = ww.length ? '' : 'none'; $('warn').innerHTML = ww.join('<br>');
+  $('go').disabled = ww.length > 0 || c === 0;
+}
+$('motivo').addEventListener('change', calc);
+$('add').onclick = () => addRow();
+addRow(PRE);
+</script>
+{% endblock %}

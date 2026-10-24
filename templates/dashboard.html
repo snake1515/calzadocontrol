@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Resumen{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Resumen de la fábrica</h1><p>Costos vs. ganancias del {{ desde }} al {{ hasta }}</p></div>
+  <form class="filters" method="get">
+    <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
+    <div class="field"><label>Hasta</label><input class="input" type="date" name="hasta" value="{{ hasta }}"></div>
+    <button class="btn sec">Filtrar</button>
+  </form>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Ventas (sin IVA)</div><div class="val">{{ ingresos|cop }}</div><div class="sub">{{ num_ventas }} ventas · {{ unidades_vendidas|num }} pares</div></div>
+  <div class="kpi"><div class="lbl">Costo de lo vendido</div><div class="val">{{ costo_vendido|cop }}</div><div class="sub">Materiales + mano de obra + indirectos</div></div>
+  <div class="kpi hl"><div class="lbl">Ganancia neta</div><div class="val {{ 'pos' if ganancia_neta >= 0 else 'neg' }}">{{ ganancia_neta|cop }}</div><div class="sub">Bruta {{ ganancia|cop }} (margen {{ margen|num(1) }}%){% if nomina_gasto > 0.5 %} − nómina {{ nomina_gasto|cop }}{% endif %}{% if gastos_neg + perdidas > 0.5 %} − gastos {{ (gastos_neg + perdidas)|cop }}{% endif %}{% if depreciacion > 0.5 %} − máquinas {{ depreciacion|cop }}{% endif %}</div></div>
+  <div class="kpi"><div class="lbl">Producción</div><div class="val">{{ unidades_prod|num }} <small style="font-size:.9rem">pares</small></div><div class="sub">Costo prom. {{ costo_unit_prod|cop }} por par</div></div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Dinero recibido</div><div class="val">{{ recaudo|cop }}</div><div class="sub">ventas de contado + abonos</div></div>
+  <div class="kpi"><div class="lbl">Cartera por cobrar</div><div class="val">{{ cartera|cop }}</div><div class="sub">{{ n_credito }} documento{{ 's' if n_credito != 1 }} · <a href="{{ url_for('cartera') }}">ver</a></div></div>
+  <div class="kpi"><div class="lbl">Cartera vencida</div><div class="val {{ 'neg' if cartera_vencida > 0.5 }}">{{ cartera_vencida|cop }}</div><div class="sub"><a href="{{ url_for('cartera', f='vencidas') }}">ver vencidas</a></div></div>
+  <div class="kpi"><div class="lbl">Nómina pagada</div><div class="val">{{ nomina_neto|cop }}</div><div class="sub">neto a empleados · <a href="{{ url_for('nominas', desde=desde, hasta=hasta) }}">ver</a></div></div>
+</div>
+
+<div class="grid g-main">
+  <div>
+    <div class="card">
+      <div class="card-head"><h2>Ventas y ganancia por día</h2></div>
+      <div style="height:260px"><canvas id="chartDias"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Referencias más vendidas</h2><a href="{{ url_for('productos') }}" class="btn sec sm">Ver referencias</a></div>
+      {% if ranking %}
+      {% set top = ranking[0].unidades or 1 %}
+      <div class="table-wrap"><table>
+        <thead><tr><th>#</th><th>Referencia</th><th class="num">Pares</th><th class="num">Ventas</th><th class="num">Ganancia</th></tr></thead>
+        <tbody>
+        {% for r in ranking %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td style="min-width:180px"><a href="{{ url_for('producto_detalle', id=r.id) }}">{{ r.nombre }}</a> <small class="muted">{{ r.linea }}</small>
+              <div class="bar {{ 'berry' if loop.first }}"><span style="width:{{ (r.unidades / top * 100)|round(1) }}%"></span></div></td>
+            <td class="num">{{ r.unidades|num }}</td>
+            <td class="num">{{ r.ingresos|cop }}</td>
+            <td class="num {{ 'pos' if r.ganancia >= 0 else 'neg' }}">{{ r.ganancia|cop }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      {% else %}<p class="empty">Aún no hay ventas en este periodo.</p>{% endif %}
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Tallas que más se venden</h2></div>
+      {% if tallas_top %}
+      <div class="tallas">{% for t, c in tallas_top %}<div class="talla" style="min-width:56px"><small>T {{ t }}</small><b>{{ c|num }}</b><div class="bar" style="margin-top:4px"><span style="width:{{ (c / max_talla * 100)|round(1) }}%"></span></div></div>{% endfor %}</div>
+      <p class="hint" style="margin-top:10px">Úsalo para armar la corrida de la próxima producción.</p>
+      {% else %}<p class="empty">Sin ventas en el periodo.</p>{% endif %}
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <div class="card-head"><h2>Costos de producción</h2><span class="badge">{{ costo_prod|cop }}</span></div>
+      {% for k, v in desglose.items() %}
+        <div class="sum-line"><span>{{ k }}</span><b>{{ v|cop }}</b></div>
+        <div class="bar" style="margin:-2px 0 4px"><span style="width:{{ ((v / costo_prod * 100) if costo_prod else 0)|round(1) }}%"></span></div>
+      {% endfor %}
+      <div class="sum-line" style="margin-top:8px;border-top:1px solid var(--line)"><span>Nómina (sueldos, aportes, prestaciones)<br><small>El destajo ya va en la mano de obra · <a href="{{ url_for('nominas') }}">Ver nómina</a></small></span><b>{{ nomina_gasto|cop }}</b></div>
+      <div class="sum-line"><span>Gastos y servicios<br><small>{% for c, v in gastos_det[:3] %}{{ c }}{{ ', ' if not loop.last }}{% else %}Arriendo, energía, agua…{% endfor %} · <a href="{{ url_for('gastos') }}">Ver gastos</a></small></span><b>{{ gastos_neg|cop }}</b></div>
+      <div class="sum-line"><span>Depreciación de máquinas<br><small><a href="{{ url_for('activos') }}">Ver máquinas</a></small></span><b>{{ depreciacion|cop }}</b></div>
+      {% if perdidas > 0.5 %}<div class="sum-line"><span>Pérdidas de inventario<br><small>Egresos por ajuste · <a href="{{ url_for('ajustes', desde=desde, hasta=hasta) }}">Ver egresos</a></small></span><b>{{ perdidas|cop }}</b></div>{% endif %}
+      <p class="hint" style="margin-top:10px">Compras en el periodo: materiales <b>{{ compras|cop }}</b>{% if compras_equipos %} · máquinas <b>{{ compras_equipos|cop }}</b>{% endif %}</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Inventario hoy</h2></div>
+      <div class="sum-line"><span>Materiales (valorizado)</span><b>{{ valor_insumos|cop }}</b></div>
+      <div class="sum-line"><span>Calzado terminado</span><b>{{ valor_productos|cop }}</b></div>
+      <div class="sum-total"><span>Total</span><span>{{ (valor_insumos + valor_productos)|cop }}</span></div>
+      {% if alertas_insumos or alertas_productos %}
+      <div class="note warn" style="margin-top:12px">
+        <b>Por agotarse:</b>
+        {% for i in alertas_insumos %}<div>▤ {{ i.nombre }}: {{ i.stock|num }} {{ i.unidad }}</div>{% endfor %}
+        {% for p in alertas_productos %}<div>👞 {{ p.etiqueta }}: {{ p.stock }} pares</div>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>¿Cuántos pares puedo hacer?</h2></div>
+      <p class="hint" style="margin:-6px 0 8px">Con los materiales en bodega y la ficha de cada referencia.</p>
+      {% for p in productos[:12] %}
+        {% set cap, lim = p.capacidad %}
+        <div class="sum-line">
+          <span>{{ p.etiqueta }}{% if lim %}<br><small>Limita: {{ lim.nombre }}</small>{% endif %}</span>
+          <b>{% if cap is none %}<span class="badge gray">Sin ficha</span>{% else %}{{ cap|num }}{% endif %}</b>
+        </div>
+      {% else %}<p class="empty">Crea tus referencias de calzado.</p>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js', v=STATIC_V) }}"></script>
+<script>
+  const S = {{ serie|tojson }};
+  new Chart(document.getElementById('chartDias'), {
+    type: 'bar',
+    data: { labels: S.labels, datasets: [
+      { label: 'Ventas', data: S.ventas, backgroundColor: '#b5602c', borderRadius: 4, order: 2 },
+      { label: 'Ganancia', data: S.ganancia, type: 'line', borderColor: '#3f6f5d', backgroundColor: '#3f6f5d', tension: .3, pointRadius: 2, order: 1 }
+    ]},
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } },
+        tooltip: { callbacks: { label: c => c.dataset.label + ': ' + COP(c.parsed.y) } } },
+      scales: { y: { ticks: { callback: v => COP(v) }, grid: { color: '#f0ebe6' } }, x: { grid: { display: false } } } }
+  });
+</script>
+{% endblock %}

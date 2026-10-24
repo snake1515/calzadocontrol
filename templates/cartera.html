@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Cartera{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Cartera (ventas a crédito)</h1><p>Lo que te deben los clientes, cuándo vence y quién está atrasado</p></div>
+  <div class="actions"><a class="btn" href="{{ url_for('venta_nueva') }}">＋ Nueva venta</a></div>
+</div>
+<div class="kpis">
+  <div class="kpi hl"><div class="lbl">Total por cobrar</div><div class="val">{{ total|cop }}</div></div>
+  <div class="kpi"><div class="lbl">Vencido</div><div class="val {{ 'neg' if total_vencido > 0.5 }}">{{ total_vencido|cop }}</div><div class="sub">{{ n_vencidas }} documento{{ 's' if n_vencidas != 1 }}</div></div>
+  <div class="kpi"><div class="lbl">Vence en 7 días</div><div class="val">{{ total_semana|cop }}</div><div class="sub">{{ n_semana }} documento{{ 's' if n_semana != 1 }}</div></div>
+  <div class="kpi"><div class="lbl">Recaudado este mes</div><div class="val pos">{{ recaudo_mes|cop }}</div><div class="sub">abonos a crédito</div></div>
+</div>
+<div>
+  <div class="card">
+    <div class="card-head">
+      <div class="seg-tabs">
+        <a class="{{ 'on' if not filtro }}" href="{{ url_for('cartera') }}">Todas</a>
+        <a class="{{ 'on' if filtro == 'vencidas' }}" href="{{ url_for('cartera', f='vencidas') }}">Vencidas</a>
+        <a class="{{ 'on' if filtro == 'semana' }}" href="{{ url_for('cartera', f='semana') }}">Vencen pronto</a>
+      </div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Documento</th><th>Cliente</th><th>Vence</th><th class="num">Total</th><th class="num">Abonado</th><th class="num">Saldo</th><th>Estado</th><th></th></tr></thead>
+      <tbody>
+      {% for v in ventas %}{% set est = v.estado_pago %}
+        <tr>
+          <td><a href="{{ url_for('venta_detalle', id=v.id) }}">{{ num_doc(v) }}</a><br><small>{{ v.fecha|fecha }}</small></td>
+          <td>{% if v.cliente_id %}<a href="{{ url_for('cliente_detalle', id=v.cliente_id) }}">{{ v.cliente }}</a>{% else %}{{ v.cliente }}{% endif %}</td>
+          <td>{{ v.vence|fecha }}</td>
+          <td class="num">{{ v.total_factura|cop }}</td>
+          <td class="num">{{ v.pagado|cop }}</td>
+          <td class="num"><b class="neg">{{ v.saldo|cop }}</b></td>
+          <td><span class="badge {{ est[1] }}">{{ est[0] }}</span></td>
+          <td class="r"><a class="btn sm" href="{{ url_for('venta_detalle', id=v.id) }}#abonos">Abonar</a></td>
+        </tr>
+      {% else %}<tr><td colspan="8" class="empty">No hay saldos pendientes con este filtro. 🎉</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  <div class="card" style="max-width:640px">
+    <div class="card-head"><h2>Edad de la cartera</h2></div>
+    {% set tmax = (rangos.values()|max) or 1 %}
+    {% for k, v in rangos.items() %}
+      <div class="sum-line"><span>{{ k }}</span><b class="{{ 'neg' if k != 'Al día' and v > 0.5 }}">{{ v|cop }}</b></div>
+      <div class="bar {{ 'berry' if k == 'Al día' }}" style="margin:-2px 0 6px"><span style="width:{{ (v / tmax * 100)|round(1) }}%{{ ';background:var(--err)' if k != 'Al día' }}"></span></div>
+    {% endfor %}
+    <p class="hint" style="margin-top:10px">Días de atraso contados desde la fecha de vencimiento. Desde la ficha del cliente puedes enviarle un recordatorio por WhatsApp con el detalle de lo que debe.</p>
+  </div>
+</div>
+{% endblock %}

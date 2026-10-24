@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Ventas{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ 'Mis ventas' if current_user.rol == 'vendedor' else 'Ventas' }}</h1><p>Del {{ desde }} al {{ hasta }}</p></div>
+  <div class="actions">
+    <form class="filters" method="get">
+      <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
+      <div class="field"><label>Hasta</label><input class="input" type="date" name="hasta" value="{{ hasta }}"></div>
+      <div class="field"><label>Condición</label><select class="input" name="cond"><option value="">Todas</option><option value="contado" {{ 'selected' if cond == 'contado' }}>Contado</option><option value="credito" {{ 'selected' if cond == 'credito' }}>Crédito</option></select></div>
+      <button class="btn sec">Filtrar</button>
+    </form>
+    <a class="btn" href="{{ url_for('venta_nueva') }}">＋ Nueva venta</a>
+  </div>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Vendido (sin IVA)</div><div class="val">{{ total|cop }}</div></div>
+  <div class="kpi"><div class="lbl">Pares</div><div class="val">{{ unidades|num }}</div><div class="sub">{{ (unidades / 12)|num(1) }} docenas</div></div>
+  <div class="kpi"><div class="lbl">Por cobrar de estas ventas</div><div class="val {{ 'neg' if saldo > 0.5 }}">{{ saldo|cop }}</div><div class="sub"><a href="{{ url_for('cartera') }}">Ver cartera</a></div></div>
+  {% if puede('admin') %}<div class="kpi hl"><div class="lbl">Ganancia bruta</div><div class="val {{ 'pos' if ganancia >= 0 else 'neg' }}">{{ ganancia|cop }}</div></div>{% endif %}
+</div>
+<div class="card">
+  <div class="table-wrap"><table>
+    <thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Detalle</th><th>Estado</th>{% if puede('admin') %}<th>Vendedor</th>{% endif %}<th class="num">Total</th><th class="num">Saldo</th>{% if puede('admin') %}<th class="num">Ganancia</th>{% endif %}<th></th></tr></thead>
+    <tbody>
+    {% for v in items %}{% set est = v.estado_pago %}
+      <tr class="{{ 'anulada' if v.anulada }}">
+        <td><a href="{{ url_for('venta_detalle', id=v.id) }}">{{ num_doc(v) }}</a></td>
+        <td>{{ v.fecha|fecha }}</td>
+        <td>{{ v.cliente or '—' }}</td>
+        <td><small>{{ v.unidades }} pares · {% for it in v.items[:3] %}{{ it.producto.nombre }} T{{ it.talla }}×{{ it.cantidad }}{{ ', ' if not loop.last }}{% endfor %}{{ '…' if v.items|length > 3 }}</small></td>
+        <td><span class="badge {{ est[1] }}">{{ est[0] }}</span><br><small>{{ 'Crédito' if v.condicion == 'credito' else v.metodo_pago }}</small></td>
+        {% if puede('admin') %}<td>{{ v.usuario.nombre if v.usuario else '' }}</td>{% endif %}
+        <td class="num"><b>{{ v.total_factura|cop }}</b></td>
+        <td class="num {{ 'neg' if v.saldo > 0.5 }}">{{ v.saldo|cop if v.saldo > 0.5 else '—' }}</td>
+        {% if puede('admin') %}<td class="num {{ 'pos' if v.ganancia >= 0 else 'neg' }}">{{ v.ganancia|cop }}</td>{% endif %}
+        <td class="r" style="white-space:nowrap"><a class="btn sec sm" href="{{ url_for('venta_comprobante', id=v.id, fmt='pdf') }}" target="_blank">PDF</a> <a class="btn sec sm" href="{{ url_for('venta_comprobante', id=v.id, fmt='jpg', descargar=1) }}">JPG</a></td>
+      </tr>
+    {% else %}<tr><td colspan="10" class="empty">No hay ventas en este periodo.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

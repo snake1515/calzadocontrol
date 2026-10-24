@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Mi cuenta{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Mi cuenta</h1><p>{{ current_user.nombre }} · {{ current_user.username }} · {{ current_user.rol_nombre }}</p></div></div>
+<div class="card" style="max-width:460px">
+  <h2 style="margin-bottom:14px">Cambiar contraseña</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field"><label>Contraseña actual</label><input class="input" type="password" name="actual" required></div>
+    <div class="field"><label>Nueva contraseña</label><input class="input" type="password" name="nueva" minlength="6" required></div>
+    <div class="field"><label>Confirmar nueva contraseña</label><input class="input" type="password" name="confirmar" minlength="6" required></div>
+    <button class="btn">Guardar</button>
+  </form>
+</div>
+{% endblock %}

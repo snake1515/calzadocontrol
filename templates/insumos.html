@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Materiales{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Materiales</h1><p>Cueros, forros, suelas, pegantes, hilos, herrajes y empaques en bodega, valorizados a costo promedio</p></div>
+  <div class="actions">
+    <a class="btn sec" href="{{ url_for('compra_nueva') }}">⇣ Registrar compra</a>
+    <a class="btn sec" href="{{ url_for('ajuste_nuevo') }}">⇡ Egreso / ajuste</a>
+    <a class="btn sec" href="{{ url_for('insumo_form', prep=1) }}">＋ Nuevo semielaborado</a>
+    <a class="btn" href="{{ url_for('insumo_form') }}">＋ Nuevo material</a>
+  </div>
+</div>
+<div class="card">
+  <div class="card-head">
+    <form class="filters" method="get"><input class="input" name="q" value="{{ q }}" placeholder="Buscar material…" style="min-width:0;flex:1 1 200px">
+      <select class="input" name="cat" style="width:auto"><option value="">Todas las categorías</option>{% for c in categorias %}<option {{ 'selected' if c == cat }}>{{ c }}</option>{% endfor %}</select>
+      <button class="btn sec sm">Buscar</button></form>
+    <span class="badge">Valor total: {{ total|cop }}</span>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Material</th><th class="num">Stock</th><th>Unidad</th><th class="num">Costo prom.</th><th class="num">Valor</th><th>Estado</th><th></th></tr></thead>
+    <tbody>
+    {% for i in items %}
+      <tr>
+        <td><b>{{ i.nombre }}</b>{% if i.es_preparacion %} <span class="badge berry">Semielaborado</span>{% endif %}<br><small>{{ i.categoria or 'Otros' }}</small></td>
+        <td class="num">{{ i.stock|num(3) }}</td>
+        <td>{{ i.unidad }}</td>
+        <td class="num">{{ i.costo_promedio|cop }}</td>
+        <td class="num">{{ i.valor_stock|cop }}</td>
+        <td>{% if i.stock <= 0 %}<span class="badge err">Agotado</span>{% elif i.bajo_minimo %}<span class="badge warn">Bajo mínimo</span>{% else %}<span class="badge ok">OK</span>{% endif %}</td>
+        <td class="r">
+          {% if i.es_preparacion %}<a class="btn sm" href="{{ url_for('preparacion_nueva', insumo=i.id) }}">Elaborar</a>{% endif %}
+          <a class="btn sec sm" href="{{ url_for('insumo_form', id=i.id) }}">Editar</a>
+          {% if puede('admin') %}
+          <form method="post" action="{{ url_for('insumo_eliminar', id=i.id) }}" style="display:inline" onsubmit="return confirm('¿Eliminar {{ i.nombre }}?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn-icon" title="Eliminar">✕</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">No hay materiales. Crea el primero: cuero, forro, suelas, pegante, hilo, cajas…</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

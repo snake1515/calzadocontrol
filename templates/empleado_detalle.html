@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ e.nombre }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ e.nombre }} {% if not e.activo %}<span class="badge gray">Retirado</span>{% endif %}</h1>
+    <p>{{ e.cargo or '' }}{% if e.proceso %} · {{ e.proceso }}{% endif %} · {{ e.tipo_nombre }}{% if e.salario %} · {{ e.salario|cop }}/mes{% endif %}{% if e.documento %} · C.C. {{ e.documento }}{% endif %}{% if e.fecha_ingreso %} · ingresó {{ e.fecha_ingreso|fecha }}{% endif %}</p></div>
+  <div class="actions">
+    {% if e.whatsapp %}<a class="btn sec" href="{{ e.whatsapp }}" target="_blank">WhatsApp</a>{% endif %}
+    <a class="btn sec" href="{{ url_for('empleado_form', id=e.id) }}">Editar</a>
+    {% if e.activo %}<a class="btn" href="{{ url_for('nomina_nueva', empleado_id=e.id) }}">✉ Liquidar nómina</a>{% endif %}
+  </div>
+</div>
+<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+  <div class="kpi hl"><div class="lbl">Destajo pendiente</div><div class="val">{{ total_pend|cop }}</div><div class="sub">{{ pares_pend|num }} pares-proceso sin liquidar</div></div>
+  <div class="kpi"><div class="lbl">Último pago</div><div class="val">{{ pagos[0].neto|cop if pagos else '—' }}</div><div class="sub">{{ pagos[0].fecha_pago|fecha if pagos else 'Sin pagos' }}</div></div>
+  <div class="kpi"><div class="lbl">Forma de pago</div><div class="val" style="font-size:1.1rem">{{ e.tipo_nombre }}</div></div>
+</div>
+<div class="grid g2">
+  <div class="card">
+    <div class="card-head"><h2>Trabajo registrado (últimos 40)</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Lote</th><th>Proceso</th><th class="num">Pares</th><th class="num">Valor</th><th></th></tr></thead>
+      <tbody>{% for l in lineas %}
+        <tr><td>{{ l.produccion.fecha|fecha }}</td><td><a href="{{ url_for('produccion_detalle', id=l.produccion_id) }}">#{{ l.produccion_id }}</a> <small>{{ l.produccion.producto.etiqueta }}</small></td>
+          <td>{{ l.proceso }}</td><td class="num">{{ l.pares }}</td><td class="num">{{ l.total|cop }}</td>
+          <td>{% if l.nomina_id %}<a class="badge ok" href="{{ url_for('nomina_detalle', id=l.nomina_id) }}">Pagado</a>{% else %}<span class="badge warn">Pendiente</span>{% endif %}</td></tr>
+      {% else %}<tr><td colspan="6" class="empty">Sin trabajo registrado. Se asigna al registrar la producción.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Pagos de nómina</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>N.º</th><th>Periodo</th><th class="num">Neto</th><th class="num">Costo empresa</th></tr></thead>
+      <tbody>{% for p in pagos %}
+        <tr class="{{ 'anulada' if p.anulada }}"><td><a href="{{ url_for('nomina_detalle', id=p.id) }}">{{ p.numero }}</a></td><td>{{ p.desde.strftime('%d/%m') }}–{{ p.hasta|fecha }}</td>
+          <td class="num">{{ p.neto|cop }}</td><td class="num">{{ p.costo_empresa|cop }}</td></tr>
+      {% else %}<tr><td colspan="4" class="empty">Aún no hay pagos.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+</div>
+{% endblock %}

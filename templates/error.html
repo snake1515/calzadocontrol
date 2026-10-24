@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ titulo }} · {{ NOMBRE_NEGOCIO }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=STATIC_V) }}">
+</head>
+<body>
+<div class="login-wrap"><div class="card login-card">
+  <h1>{{ titulo }}</h1><p class="muted">{{ mensaje }}</p>
+  <a class="btn" href="{{ url_for('inicio') }}">Volver al inicio</a>
+</div></div>
+</body>
+</html>

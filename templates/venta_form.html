@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Nueva venta{% endblock %}
+{% block content %}
+<style>
+  .refs { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; max-height: 520px; overflow-y: auto; padding: 2px; }
+  .ref { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
+  .ref.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .ref b { display: block; line-height: 1.25; }
+  .ref .meta { font-size: .8rem; color: var(--muted); margin: 2px 0 8px; }
+  .ref .talla { min-width: 40px; padding: 4px; }
+  .ref .talla em { display: block; font-style: normal; font-size: .7rem; color: var(--accent); font-weight: 800; }
+  .cli-info { margin-top: 10px; font-size: .88rem; }
+  .deuda { background: var(--warn-soft); color: #7a5214; border-radius: 10px; padding: 10px 12px; margin-top: 10px; font-size: .88rem; }
+</style>
+<div class="page-head"><div><h1>Nueva venta</h1><p>Toca la talla de cada referencia para agregar pares. Ajusta cantidad y precio abajo.</p></div></div>
+{% if not productos %}<div class="note warn">No hay referencias creadas.</div>{% else %}
+<form method="post" id="f">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>Cliente</h2><a href="{{ url_for('clientes') }}" class="btn sec sm">Ver clientes</a></div>
+        <input type="hidden" name="cliente_id" id="cliId">
+        <input class="input" name="cliente" id="cli" list="cliList" autocomplete="off" placeholder="Escribe para buscar, o déjalo vacío (cliente de mostrador)" value="{{ request.form.cliente }}">
+        <datalist id="cliList">{% for c in clientes %}<option value="{{ c.nombre }}">{{ c.tipo }}{{ ' · ' ~ c.tel if c.tel }}</option>{% endfor %}</datalist>
+        <div id="cliInfo" class="cli-info"></div>
+        <div id="deuda" class="deuda" style="display:none"></div>
+        <div class="field" style="margin-top:10px;margin-bottom:0"><label>Cédula o NIT <small class="muted">(sale en el recibo)</small></label>
+          <input class="input" name="cliente_doc" id="cliDoc" value="{{ request.form.cliente_doc }}" placeholder="Ej: 1.090.123.456 o 900.123.456-7" autocomplete="off"></div>
+        <div id="cliNuevo" style="display:none;margin-top:10px">
+          <div class="form-row">
+            <div class="field"><label>Teléfono</label><input class="input" name="cliente_tel" placeholder="Opcional"></div>
+            <div class="field"><label>Tipo</label><select class="input" name="cliente_tipo">{% for t in tipos_cliente %}<option>{{ t }}</option>{% endfor %}</select></div>
+          </div>
+          <label class="check"><input type="checkbox" name="guardar_cliente" value="1" checked> <span>Guardar en mis clientes</span></label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head" style="margin-bottom:10px">
+          <h2>Referencias</h2>
+          <div class="filters">
+            <input class="input" id="buscar" placeholder="Buscar modelo, color o código…" style="min-width:0;width:220px">
+            <select class="input" id="lineaF" style="width:auto"><option value="">Todas</option>{% for l in lineas %}<option>{{ l }}</option>{% endfor %}</select>
+          </div>
+        </div>
+        <div class="refs" id="refs"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Detalle</h2></div>
+        <div class="table-wrap"><table class="lines">
+          <thead><tr><th>Referencia</th><th>Talla</th><th class="num">Pares</th><th class="num">Precio par</th><th class="num">Subtotal</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table></div>
+        <p class="empty" id="vacio">Aún no has agregado pares.</p>
+      </div>
+    </div>
+    <div class="card summary">
+      <h2>Total a pagar</h2>
+      <div class="big-num" id="tot">$ 0</div>
+      <p class="hint" id="und">0 pares</p>
+      <div class="field"><label>Lista de precios</label>
+        <div class="seg"><label><input type="radio" name="lista" value="detal" checked>Detal</label><label><input type="radio" name="lista" value="mayor">Por mayor</label></div>
+        <div class="hint">Cambia el precio de las líneas que aún no has editado.</div></div>
+      <div class="sum-line"><span>Subtotal</span><b id="sub">$ 0</b></div>
+      <div class="form-row" style="margin-top:8px">
+        <div class="field"><label>Descuento ($)</label><input class="input" type="number" min="0" step="any" name="descuento" id="desc" value="{{ request.form.descuento }}" placeholder="0"></div>
+        <div class="field"><label>IVA (%)</label><input class="input" type="number" min="0" max="100" step="any" name="iva_pct" id="iva" value="{{ request.form.iva_pct or ('%g'|format(iva_def)) }}"></div>
+      </div>
+      <div class="sum-line" id="ivaLine" style="display:none"><span>IVA</span><b id="ivaV">$ 0</b></div>
+      <div class="field" style="margin-top:10px"><label>Condición</label>
+        <div class="seg"><label><input type="radio" name="condicion" value="contado" {{ 'checked' if request.form.condicion != 'credito' }}>Contado</label><label><input type="radio" name="condicion" value="credito" {{ 'checked' if request.form.condicion == 'credito' }}>Crédito</label></div></div>
+      <div id="credBox" style="display:none">
+        <div class="form-row">
+          <div class="field"><label>Plazo (días)</label><input class="input" type="number" min="0" step="1" name="plazo_dias" id="plazo" value="{{ request.form.plazo_dias or 30 }}"></div>
+          <div class="field"><label>Abono inicial ($)</label><input class="input" type="number" min="0" step="any" name="abono_inicial" id="abono" value="{{ request.form.abono_inicial }}" placeholder="0"></div>
+        </div>
+        <p class="hint" id="venceTxt" style="margin-top:-6px"></p>
+      </div>
+      <div class="form-row">
+        <div class="field"><label id="pagoLbl">Medio de pago</label><select class="input" name="metodo_pago">{% for m in metodos %}<option {{ 'selected' if request.form.metodo_pago == m }}>{{ m }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Fecha</label><input class="input" type="date" name="fecha" id="fecha" value="{{ request.form.fecha or hoy }}"></div>
+      </div>
+      <div class="field"><label>Nota</label><input class="input" name="nota" placeholder="Opcional · ej: pedido #45, despacho por transportadora" value="{{ request.form.nota }}"></div>
+      <div id="warn" class="note warn" style="display:none;margin-bottom:10px"></div>
+      <button class="btn block" id="go">Registrar venta</button>
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const PRODS = {{ productos|tojson }}, CLIS = {{ clientes|tojson }}, PRECLI = {{ pre_cliente|tojson }};
+const rows = document.getElementById('rows'), $ = id => document.getElementById(id);
+if (rows) {
+  const prod = id => PRODS.find(p => p.id == id);
+  let cliente = null;
+  const lista = () => document.querySelector('input[name="lista"]:checked').value;
+  const condicion = () => document.querySelector('input[name="condicion"]:checked').value;
+  const precioDe = p => lista() === 'mayor' ? p.mayor : p.precio;
+  const enCarrito = () => { const m = {}; rows.querySelectorAll('tr').forEach(tr => { const k = tr.dataset.id + ':' + tr.dataset.t; m[k] = (m[k] || 0) + val(tr.querySelector('.q')); }); return m; };
+
+  function pintarRefs() {
+    const q = $('buscar').value.trim().toLowerCase(), l = $('lineaF').value, c = enCarrito();
+    $('refs').innerHTML = PRODS.filter(p => (!l || p.linea === l) && (!q || p.nombre.toLowerCase().includes(q))).map(p => {
+      const tot = Object.keys(p.tallas).reduce((s, t) => s + (c[p.id + ':' + t] || 0), 0);
+      return `<div class="ref ${tot ? 'sel' : ''}"><b>${p.nombre}</b><div class="meta">${p.linea} · ${COP(precioDe(p))} · ${p.stock} pares</div>
+        <div class="tallas">${Object.entries(p.tallas).map(([t, s]) => { const u = c[p.id + ':' + t] || 0;
+          return `<button type="button" class="talla" data-id="${p.id}" data-t="${t}" ${s - u <= 0 ? 'disabled' : ''} title="Talla ${t}: ${s} disponibles"><small>${t}</small><b>${s - u}</b>${u ? `<em>+${u}</em>` : ''}</button>`; }).join('')}</div></div>`;
+    }).join('') || '<p class="empty">Sin referencias con ese filtro.</p>';
+    $('refs').querySelectorAll('button.talla').forEach(b => b.onclick = () => add(b.dataset.id, b.dataset.t));
+  }
+  function add(id, t, q = 1) {
+    let tr = rows.querySelector(`tr[data-id="${id}"][data-t="${t}"]`);
+    if (tr) { const i = tr.querySelector('.q'); i.value = val(i) + q; return calc(); }
+    const p = prod(id);
+    tr = document.createElement('tr'); tr.dataset.id = id; tr.dataset.t = t;
+    tr.innerHTML = `<td><b>${p.nombre}</b><input type="hidden" name="producto_id[]" value="${id}"></td>
+      <td><select class="input tS" name="talla[]" style="width:76px">${Object.keys(p.tallas).map(x => `<option ${x == t ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
+      <td><input class="input r q" type="number" min="1" step="1" name="cantidad[]" value="${q}" style="width:76px"></td>
+      <td><input class="input r pr" type="number" min="0" step="any" name="precio[]" value="${precioDe(p)}" style="width:110px"></td>
+      <td class="num st"></td><td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
+    tr.querySelector('.btn-icon').onclick = () => { tr.remove(); calc(); };
+    tr.querySelector('.tS').addEventListener('change', e => { tr.dataset.t = e.target.value; calc(); });
+    tr.querySelector('.pr').addEventListener('input', e => e.target.dataset.edit = 1);
+    tr.querySelectorAll('input').forEach(e => e.addEventListener('input', calc));
+    rows.appendChild(tr); calc();
+  }
+  function calc() {
+    let s = 0, u = 0; const w = [], c = enCarrito();
+    rows.querySelectorAll('tr').forEach(tr => {
+      const q = val(tr.querySelector('.q')), pr = val(tr.querySelector('.pr'));
+      tr.querySelector('.st').textContent = COP(q * pr); s += q * pr; u += q;
+    });
+    for (const k in c) { const [id, t] = k.split(':'), p = prod(id), hay = p.tallas[t] || 0;
+      if (c[k] > hay) w.push(`${p.nombre} talla ${t}: solo hay ${hay}`); }
+    const d = Math.min(val($('desc')), s), base = s - d, iva = Math.round(base * val($('iva')) / 100), tot = base + iva;
+    $('sub').textContent = COP(s); $('ivaV').textContent = COP(iva); $('ivaLine').style.display = iva ? '' : 'none';
+    $('tot').textContent = COP(tot);
+    $('und').textContent = NUM(u, 0) + (u === 1 ? ' par' : ' pares') + (u >= 12 ? ` · ${NUM(u / 12, 1)} docenas` : '');
+    const cred = condicion() === 'credito';
+    $('credBox').style.display = cred ? '' : 'none';
+    $('pagoLbl').textContent = cred ? 'Medio del abono' : 'Medio de pago';
+    if (cred) {
+      const f = new Date(($('fecha').value || '{{ hoy }}') + 'T12:00'); f.setDate(f.getDate() + (parseInt($('plazo').value) || 0));
+      const ab = val($('abono'));
+      $('venceTxt').innerHTML = `Vence el <b>${f.toLocaleDateString('es-CO')}</b> · queda debiendo <b>${COP(Math.max(tot - ab, 0))}</b>`;
+      if (!$('cli').value.trim()) w.push('Para vender a crédito escribe o elige el cliente.');
+      if (ab > tot + .5) w.push('El abono inicial supera el total.');
+      if (cliente && cliente.cupo && cliente.saldo + tot - ab > cliente.cupo) w.push(`Con esta venta ${cliente.nombre} supera su cupo de ${COP(cliente.cupo)}.`);
+    }
+    $('vacio').style.display = rows.children.length ? 'none' : '';
+    const wEl = $('warn'); wEl.style.display = w.length ? '' : 'none'; wEl.innerHTML = w.join('<br>');
+    $('go').disabled = !rows.children.length || w.some(x => !x.includes('cupo'));
+    pintarRefs();
+  }
+  function cambiarLista() {
+    rows.querySelectorAll('tr').forEach(tr => { const i = tr.querySelector('.pr'); if (!i.dataset.edit) i.value = precioDe(prod(tr.dataset.id)); });
+    calc();
+  }
+  function elegirCliente() {
+    const nom = $('cli').value.trim().toLowerCase();
+    cliente = CLIS.find(c => c.nombre.toLowerCase() === nom) || null;
+    $('cliId').value = cliente ? cliente.id : '';
+    $('cliNuevo').style.display = (!cliente && nom) ? '' : 'none';
+    if (cliente && cliente.doc) $('cliDoc').value = cliente.doc;
+    else if (cliente && $('cliDoc').dataset.auto) $('cliDoc').value = '';
+    $('cliDoc').dataset.auto = (cliente && cliente.doc) ? '1' : '';
+    if (cliente) {
+      $('cliInfo').innerHTML = `<span class="badge">${cliente.tipo || 'Cliente'}</span> ${cliente.estado}` + (cliente.dias != null ? ' · última compra ' + (cliente.dias === 0 ? 'hoy' : cliente.dias === 1 ? 'ayer' : `hace ${cliente.dias} días`) : '')
+        + (cliente.plazo ? ` · crédito a ${cliente.plazo} días` : '');
+      if (cliente.plazo) $('plazo').value = cliente.plazo;
+      const r = document.querySelector(`input[name="lista"][value="${cliente.mayor ? 'mayor' : 'detal'}"]`); r.checked = true; cambiarLista();
+    } else $('cliInfo').innerHTML = nom ? '<small class="muted">Cliente nuevo</small>' : '';
+    if (cliente && cliente.saldo > .5) {
+      $('deuda').style.display = '';
+      $('deuda').innerHTML = `⏳ <b>${cliente.nombre}</b> debe <b>${COP(cliente.saldo)}</b>` + (cliente.vencido > .5 ? `, de los cuales <b>${COP(cliente.vencido)} están vencidos</b>.` : ' (al día).') + (cliente.cupo ? ` Cupo: ${COP(cliente.cupo)}.` : '');
+    } else $('deuda').style.display = 'none';
+    calc();
+  }
+  $('cli').addEventListener('input', elegirCliente);
+  $('buscar').addEventListener('input', pintarRefs);
+  $('lineaF').addEventListener('change', pintarRefs);
+  ['desc', 'iva', 'plazo', 'abono', 'fecha'].forEach(i => $(i).addEventListener('input', calc));
+  document.querySelectorAll('input[name="lista"]').forEach(r => r.addEventListener('change', cambiarLista));
+  document.querySelectorAll('input[name="condicion"]').forEach(r => r.addEventListener('change', calc));
+  if (PRECLI) { const c = CLIS.find(x => x.id === PRECLI); if (c) $('cli').value = c.nombre; }
+  elegirCliente();
+}
+</script>
+{% endblock %}

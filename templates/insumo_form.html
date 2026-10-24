@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if ins else 'Nuevo' }} material o semielaborado{% endblock %}
+{% block content %}
+{% set es_prep = (request.form.es_preparacion if request.method == 'POST' else (ins.es_preparacion if ins else request.args.get('prep'))) %}
+<div class="page-head"><div><h1>{{ 'Editar ' ~ ('semielaborado' if ins and ins.es_preparacion else 'material') if ins else ('Nuevo semielaborado' if es_prep else 'Nuevo material') }}</h1>
+  <p>{{ 'El stock y el costo cambian con compras, semielaborados y producción.' if ins else 'Ej: cuero napa, forro badana, suela TR, pegante PU, hilo nylon, cajas… o un semielaborado que tú haces.' }}</p></div></div>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div>
+      <div class="card">
+        <div class="form-row">
+          <div class="field"><label>Nombre</label><input class="input" name="nombre" value="{{ request.form.nombre or (ins.nombre if ins) or '' }}" placeholder="Ej: Cuero napa negro / Suela TR dama" required></div>
+          <div class="field"><label>Unidad de medida</label>
+            <select class="input" name="unidad" id="unidad">
+              {% set sel = request.form.unidad or (ins.unidad if ins else 'unidad') %}
+              {% for u in unidades %}<option {{ 'selected' if u == sel }}>{{ u }}</option>{% endfor %}
+            </select>
+            <div class="hint">Así lo vas a medir en la ficha (ej: pie cuadrado, par, galón, metro).</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Categoría</label><select class="input" name="categoria">
+            {% set sc = request.form.categoria or (ins.categoria if ins else '') %}{% for c in categorias %}<option {{ 'selected' if c == sc }}>{{ c }}</option>{% endfor %}</select></div>
+          <div class="field"><label>Stock mínimo (alerta)</label>
+            <input class="input" type="number" step="any" min="0" name="stock_minimo" value="{{ request.form.stock_minimo or ('%g'|format(ins.stock_minimo) if ins else '') }}"></div>
+        </div>
+        <label class="check" style="margin-bottom:6px"><input type="checkbox" name="es_preparacion" value="1" id="esPrep" {{ 'checked' if es_prep }}>
+          <span>Es un <b>semielaborado propio</b> (no se compra ni se vende)</span></label>
+        <div class="hint" style="margin:0 0 4px 24px">Ej: plantilla armada (cartón + espuma + forro). Se elabora en <b>Semielaborados</b> y se usa en la ficha de las referencias.</div>
+      </div>
+
+      <div class="card" id="recetaBox">
+        <div class="card-head"><h2>Tanda estándar</h2></div>
+        <p class="hint" style="margin:-6px 0 10px">Lo que lleva una tanda normal y cuánto rinde. Ej: 1 lámina de cartón + 1 lámina de espuma + 2 m de forro rinden 20 pares de plantillas.</p>
+        <div class="field" style="max-width:320px"><label>Una tanda rinde (<span class="uTxt">unidad</span>)</label>
+          <input class="input" type="number" step="any" min="0" name="tanda_rinde" id="rinde" value="{{ request.form.tanda_rinde or ('%g'|format(ins.tanda_rinde) if ins and ins.tanda_rinde else '1') }}"></div>
+        <div class="table-wrap"><table class="lines">
+          <thead><tr><th>Material</th><th class="num">Cantidad por tanda</th><th>Unidad</th><th class="num">Costo</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table></div>
+        <button type="button" class="btn sec sm" id="add" style="margin-top:10px">＋ Agregar material</button>
+        <p class="hint" style="margin-top:10px">Costo de la tanda: <b id="cTanda">$ 0</b> · Costo estimado por <span class="uTxt">unidad</span> (solo materiales): <b id="cRec">$ 0</b></p>
+      </div>
+
+      {% if not ins %}
+      <div class="card" id="iniBox">
+        <div class="note" style="margin-bottom:14px"><b>Inventario inicial (opcional).</b> Si ya tienes este material en bodega, escribe la cantidad, lo que te costó en total y la fecha en que lo compraste.</div>
+        <div class="form-row">
+          <div class="field"><label>Cantidad que tienes</label><input class="input" type="number" step="any" min="0" name="cantidad_inicial" value="{{ request.form.cantidad_inicial }}"></div>
+          <div class="field"><label>Costo total ($)</label><input class="input" type="number" step="any" min="0" name="costo_inicial" value="{{ request.form.costo_inicial }}"></div>
+          <div class="field"><label>Fecha de compra</label><input class="input" type="date" name="fecha_inicial" max="{{ hoy }}" value="{{ request.form.fecha_inicial or hoy }}"></div>
+        </div>
+      </div>
+      {% else %}
+      <div class="note" style="margin-top:16px">Stock actual: <b>{{ ins.stock|num(3) }} {{ ins.unidad }}</b> · Costo promedio: <b>{{ ins.costo_promedio|cop }}</b> por {{ ins.unidad }}</div>
+      {% endif %}
+      <div class="actions" style="margin-top:16px"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('insumos') }}">Cancelar</a></div>
+    </div>
+    <div class="card summary">
+      <h2>¿Material o semielaborado?</h2>
+      <div class="sum-line"><span><b>Material</b><br><small>Se compra (cuero, suelas, pegante, cajas). Entra por Compras.</small></span></div>
+      <div class="sum-line"><span><b>Semielaborado</b><br><small>Se hace con otros materiales (plantilla armada, contrafuerte). Entra por Semielaborados, con su costo real.</small></span></div>
+      <p class="hint">Los dos se usan igual en la ficha de consumo de las referencias.</p>
+    </div>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const INS = {{ componentes|tojson }};
+const REC = {{ receta_prep|tojson }};
+const $ = id => document.getElementById(id);
+const rows = $('rows');
+const byId = id => INS.find(i => i.id == id);
+function opts(sel) { return '<option value="">— Elegir —</option>' + INS.map(i => `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre}</option>`).join(''); }
+function addRow(sel = '', cant = '', uni = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td style="min-width:180px"><select class="input iSel" name="prep_insumo[]">${opts(sel)}</select></td>
+    <td><input class="input r" type="number" step="any" min="0" name="prep_cantidad[]" value="${cant}" style="min-width:80px"></td>
+    <td><select class="input uSel" name="prep_unidad[]" style="min-width:76px"></select></td><td class="num co">—</td><td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
+  const iSel = tr.querySelector('.iSel'), uSel = tr.querySelector('.uSel');
+  llenarUnidades(uSel, (byId(sel) || {}).unidad, uni);
+  iSel.addEventListener('change', () => llenarUnidades(uSel, (byId(iSel.value) || {}).unidad));
+  tr.querySelector('.btn-icon').onclick = () => { tr.remove(); calc(); };
+  tr.querySelectorAll('input,select').forEach(e => e.addEventListener('input', calc));
+  rows.appendChild(tr); calc();
+}
+function calc() {
+  let t = 0;
+  rows.querySelectorAll('tr').forEach(tr => {
+    const i = byId(tr.querySelector('.iSel').value), q = val(tr.querySelector('input')), u = tr.querySelector('.uSel').value;
+    const c = i ? conv(q, u, i.unidad) * i.costo : 0; t += c;
+    tr.querySelector('.co').textContent = i ? COP(c) : '—';
+  });
+  const r = val($('rinde')) || 1;
+  $('cTanda').textContent = COP(t); $('cRec').textContent = COP(t / r);
+  document.querySelectorAll('.uTxt').forEach(e => e.textContent = $('unidad').value);
+}
+function ui() {
+  const p = $('esPrep').checked;
+  $('recetaBox').style.display = p ? '' : 'none';
+  if ($('iniBox')) $('iniBox').style.display = p ? 'none' : '';
+}
+$('esPrep').addEventListener('change', ui); $('unidad').addEventListener('change', calc); $('rinde').addEventListener('input', calc);
+$('add').onclick = () => addRow();
+if (REC.length) REC.forEach(r => addRow(r.insumo_id, r.cantidad, r.unidad)); else addRow();
+ui();
+</script>
+{% endblock %}

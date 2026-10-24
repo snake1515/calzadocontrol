@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Usuarios{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Usuarios</h1><p>Quién entra y qué puede hacer</p></div>
+  <a class="btn" href="{{ url_for('usuario_form') }}">＋ Nuevo usuario</a>
+</div>
+<div class="grid g-main">
+  <div class="card">
+    <div class="table-wrap"><table>
+      <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+      <tbody>{% for u in items %}
+        <tr><td><b>{{ u.nombre }}</b></td><td>{{ u.username }}</td><td><span class="badge {{ 'berry' if u.rol == 'admin' }}">{{ u.rol_nombre }}</span></td>
+        <td>{% if u.activo %}<span class="badge ok">Activo</span>{% else %}<span class="badge gray">Inactivo</span>{% endif %}</td>
+        <td class="r"><a class="btn sec sm" href="{{ url_for('usuario_form', id=u.id) }}">Editar</a></td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <h2 style="margin-bottom:10px">Permisos por rol</h2>
+    <div class="sum-line"><span><b>Administrador</b><br><small>Todo: resumen de ganancias, recetas y precios, usuarios, anular ventas</small></span></div>
+    <div class="sum-line"><span><b>Producción</b><br><small>Materiales, compras, referencias y registrar producción. No ve ventas, nómina ni ganancias.</small></span></div>
+    <div class="sum-line"><span><b>Vendedor</b><br><small>Registrar ventas, abonos y clientes; ve solo sus ventas. No ve costos.</small></span></div>
+  </div>
+</div>
+{% endblock %}

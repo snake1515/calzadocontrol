@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if c else 'Nuevo' }} cliente{% endblock %}
+{% block content %}
+{% set F = request.form %}
+<div class="page-head"><div><h1>{{ 'Editar cliente' if c else 'Nuevo cliente' }}</h1><p>Almacenes, distribuidores, vendedores por catálogo y personas que te compran calzado.</p></div></div>
+<div class="card" style="max-width:760px">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+      <div class="field"><label>Nombre o razón social</label><input class="input" name="nombre" value="{{ F.nombre or (c.nombre if c else '') }}" placeholder="Ej: Almacén El Paso" required></div>
+      <div class="field"><label>Tipo</label><select class="input" name="tipo">
+        {% set sel = F.tipo or (c.tipo if c else tipos[0]) %}{% for t in tipos %}<option {{ 'selected' if t == sel }}>{{ t }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Cédula o NIT</label><input class="input" name="identificacion" value="{{ F.identificacion or (c.identificacion or '' if c else '') }}" placeholder="Sale en el recibo"></div>
+      <div class="field"><label>Teléfono / WhatsApp</label><input class="input" name="telefono" value="{{ F.telefono or (c.telefono or '' if c else '') }}" placeholder="Ej: 300 123 4567"></div>
+      <div class="field"><label>Correo</label><input class="input" type="email" name="email" value="{{ F.email or (c.email or '' if c else '') }}" placeholder="Opcional"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Dirección</label><input class="input" name="direccion" value="{{ F.direccion or (c.direccion or '' if c else '') }}" placeholder="Opcional"></div>
+      <div class="field"><label>Ciudad</label><input class="input" name="ciudad" value="{{ F.ciudad or (c.ciudad or '' if c else '') }}" placeholder="Ej: Cúcuta"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Plazo de crédito (días)</label><input class="input" type="number" min="0" step="1" name="plazo_dias" value="{{ F.plazo_dias or (c.plazo_dias if c else 0) }}"><div class="hint">0 = solo contado. Se sugiere al venderle a crédito.</div></div>
+      <div class="field"><label>Cupo de crédito ($)</label><input class="input" type="number" min="0" step="any" name="cupo" value="{{ F.cupo or ('%g'|format(c.cupo) if c and c.cupo else '') }}" placeholder="Sin límite"><div class="hint">La app avisa si una venta lo supera.</div></div>
+    </div>
+    <label class="check" style="margin-bottom:14px"><input type="checkbox" name="usa_precio_mayor" value="1" {{ 'checked' if (F.usa_precio_mayor if F else (c.usa_precio_mayor if c else False)) }}> <span>Venderle con <b>precio por mayor</b></span></label>
+    <div class="field"><label>Nota</label><input class="input" name="nota" value="{{ F.nota or (c.nota or '' if c else '') }}" placeholder="Ej: paga los viernes, pide tallas grandes"></div>
+    <div class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('cliente_detalle', id=c.id) if c else url_for('clientes') }}">Cancelar</a></div>
+  </form>
+</div>
+{% if c and puede('admin') %}
+<form method="post" action="{{ url_for('cliente_eliminar', id=c.id) }}" style="margin-top:16px" onsubmit="return confirm('¿Retirar a {{ c.nombre }}? Sus ventas se conservan.')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm">Retirar cliente</button>
+</form>
+{% endif %}
+{% endblock %}

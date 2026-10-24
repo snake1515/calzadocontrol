@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Referencias{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Referencias de calzado</h1><p>{{ total_pares|num }} pares en bodega · valorizados en {{ valor|cop }}</p></div>
+  <div class="actions"><a class="btn sec" href="{{ url_for('ajuste_nuevo') }}">⇡ Egreso / ajuste</a>{% if puede('admin') %}<a class="btn" href="{{ url_for('producto_form') }}">＋ Nueva referencia</a>{% endif %}</div>
+</div>
+<div class="card">
+  <div class="card-head">
+    <form class="filters" method="get">
+      <input class="input" name="q" value="{{ q }}" placeholder="Buscar por código, modelo o color…" style="min-width:0;flex:1 1 220px">
+      <select class="input" name="linea" style="width:auto"><option value="">Todas las líneas</option>{% for l in lineas %}<option {{ 'selected' if l == linea }}>{{ l }}</option>{% endfor %}</select>
+      <button class="btn sec sm">Filtrar</button>
+    </form>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Referencia</th><th>Existencias por talla</th><th class="num">Pares</th><th class="num">Costo par</th><th class="num">Detal / mayor</th><th class="num">Ganancia par</th><th></th></tr></thead>
+    <tbody>
+    {% for p in items %}
+      <tr>
+        <td style="min-width:180px"><a href="{{ url_for('producto_detalle', id=p.id) }}"><b>{{ p.etiqueta }}</b></a><br><small>{{ p.linea }}{% if p.material %} · {{ p.material }}{% endif %} · T{{ p.talla_min }}–{{ p.talla_max }}</small></td>
+        <td><div class="tallas">{% for t, s in p.stock_por_talla.items() %}<div class="talla {{ 'cero' if s <= 0 }}"><small>{{ t }}</small><b>{{ s }}</b></div>{% endfor %}</div></td>
+        <td class="num"><b>{{ p.stock|num }}</b>{% if p.bajo_minimo %}<br><span class="badge warn">bajo</span>{% endif %}</td>
+        <td class="num">{% if p.costo_promedio %}{{ p.costo_promedio|cop }}{% else %}<small>Estándar: {{ p.costo_estandar|cop }}</small>{% endif %}</td>
+        <td class="num">{{ p.precio_venta|cop }}<br><small>{{ (p.precio_mayor or p.precio_venta)|cop }}</small></td>
+        {% set g = p.precio_venta - p.costo_ref %}
+        <td class="num {{ 'pos' if g >= 0 else 'neg' }}">{{ g|cop }}</td>
+        <td class="r"><a class="btn sec sm" href="{{ url_for('produccion_nueva', producto=p.id) }}">Producir</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="empty">Aún no hay referencias. Crea la primera, por ejemplo «Baleta clásica · Negro».</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="hint" style="margin-top:10px"><b>Costo par</b> = promedio real de lo que costó producir cada par (materiales + mano de obra + indirectos). Si aún no se ha producido, se muestra el costo estándar de la ficha.</p>
+</div>
+{% endblock %}

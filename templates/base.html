@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ NOMBRE_NEGOCIO }}{% endblock %} · {{ NOMBRE_NEGOCIO }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=STATIC_V) }}">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}">
+  <style>
+    .sidebar { overflow-y: auto; }
+    .nav a { padding: 7px 12px; }
+    #carga { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: var(--accent); z-index: 100; transition: width .3s ease; box-shadow: 0 0 8px var(--accent); }
+    #carga.on { width: 70%; transition: width 4s cubic-bezier(.1,.7,.2,1); }
+    .overlay { display: none; }
+    @media (max-width: 820px) {
+      #menu-toggle:checked ~ .overlay { display: block; position: fixed; inset: 0; z-index: 25; background: rgba(0,0,0,.35); margin: 0; }
+      #menu-toggle:checked ~ .layout .sidebar { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+{% set ep = request.endpoint or '' %}
+<div id="carga"></div>
+<input type="checkbox" id="menu-toggle">
+<label for="menu-toggle" class="overlay" aria-hidden="true"></label>
+<header class="topbar">
+  <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_sm.jpg', v=STATIC_V) }}" alt=""><div><b>{{ NOMBRE_NEGOCIO }}</b></div></div>
+  <label for="menu-toggle" aria-label="Abrir menú">☰</label>
+</header>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_sm.jpg', v=STATIC_V) }}" alt=""><div><b>{{ NOMBRE_NEGOCIO }}</b><small>Fábrica de calzado</small></div></div>
+    <nav class="nav">
+      {% if puede('admin') %}
+      <a href="{{ url_for('inicio') }}" class="{{ 'on' if ep == 'inicio' }}"><span class="ico">◧</span>Resumen</a>
+      <a href="{{ url_for('reportes') }}" class="{{ 'on' if ep.startswith('reportes') }}"><span class="ico">▦</span>Reportes</a>
+      <a href="{{ url_for('distribucion') }}" class="{{ 'on' if ep == 'distribucion' }}"><span class="ico">%</span>Distribución</a>
+      {% endif %}
+      {% if puede('admin', 'vendedor') %}
+      <div class="nav-sep"></div>
+      <a href="{{ url_for('venta_nueva') }}" class="{{ 'on' if ep == 'venta_nueva' }}"><span class="ico">＋</span>Nueva venta</a>
+      <a href="{{ url_for('ventas') }}" class="{{ 'on' if ep in ('ventas', 'venta_detalle') }}"><span class="ico">$</span>Ventas</a>
+      <a href="{{ url_for('cartera') }}" class="{{ 'on' if ep == 'cartera' }}"><span class="ico">⏳</span>Cartera (crédito)</a>
+      <a href="{{ url_for('clientes') }}" class="{{ 'on' if ep.startswith('cliente') }}"><span class="ico">♟</span>Clientes</a>
+      {% endif %}
+      {% if puede('admin', 'produccion') %}
+      <div class="nav-sep"></div>
+      <a href="{{ url_for('producciones') }}" class="{{ 'on' if ep.startswith('produccion') }}"><span class="ico">⚙</span>Producción</a>
+      <a href="{{ url_for('productos') }}" class="{{ 'on' if ep.startswith('producto') }}"><span class="ico">👞</span>Referencias</a>
+      <a href="{{ url_for('insumos') }}" class="{{ 'on' if ep.startswith('insumo') }}"><span class="ico">▤</span>Materiales</a>
+      <a href="{{ url_for('compras') }}" class="{{ 'on' if ep.startswith('compra') }}"><span class="ico">⇣</span>Compras</a>
+      <a href="{{ url_for('preparaciones') }}" class="{{ 'on' if ep.startswith('preparacion') }}"><span class="ico">◍</span>Semielaborados</a>
+      <a href="{{ url_for('ajustes') }}" class="{{ 'on' if ep.startswith('ajuste') }}"><span class="ico">⇡</span>Egresos y ajustes</a>
+      {% endif %}
+      {% if puede('admin') %}
+      <div class="nav-sep"></div>
+      <a href="{{ url_for('empleados') }}" class="{{ 'on' if ep.startswith('empleado') }}"><span class="ico">☺</span>Empleados</a>
+      <a href="{{ url_for('nominas') }}" class="{{ 'on' if ep.startswith('nomina') }}"><span class="ico">✉</span>Nómina</a>
+      <a href="{{ url_for('gastos') }}" class="{{ 'on' if ep.startswith('gasto') }}"><span class="ico">✎</span>Gastos y servicios</a>
+      <a href="{{ url_for('activos') }}" class="{{ 'on' if ep.startswith('activo') }}"><span class="ico">⚒</span>Máquinas (activos)</a>
+      <div class="nav-sep"></div>
+      <a href="{{ url_for('usuarios') }}" class="{{ 'on' if ep.startswith('usuario') }}"><span class="ico">⚿</span>Usuarios</a>
+      <a href="{{ url_for('negocio') }}" class="{{ 'on' if ep == 'negocio' }}"><span class="ico">⌂</span>Datos del negocio</a>
+      <a href="{{ url_for('configuracion') }}" class="{{ 'on' if ep == 'configuracion' }}"><span class="ico">⚙</span>Configuración</a>
+      {% endif %}
+    </nav>
+    <div class="me">
+      <b>{{ current_user.nombre }}</b>
+      <span>{{ current_user.rol_nombre }}</span> ·
+      <a href="{{ url_for('cuenta') }}">Mi cuenta</a> ·
+      <a href="{{ url_for('logout') }}">Salir</a>
+    </div>
+  </aside>
+  <main class="main">
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script>
+  // Formato de pesos colombianos para los cálculos en pantalla
+  const COP = v => (v < -0.5 ? '-$ ' : '$ ') + Math.round(Math.abs(v || 0)).toLocaleString('es-CO');
+  const NUM = (v, d = 2) => (v || 0).toLocaleString('es-CO', { maximumFractionDigits: d });
+  const val = el => { const x = parseFloat(String(el && el.value || '').replace(',', '.')); return isNaN(x) ? 0 : x; };
+  // Unidades convertibles: masa (g) y volumen (ml)
+  const UNI = { kilogramo: ['m', 1000], gramo: ['m', 1], libra: ['m', 453.592], litro: ['v', 1000], mililitro: ['v', 1], 'galón': ['v', 3785.41],
+    metro: ['l', 100], 'centímetro': ['l', 1], yarda: ['l', 91.44], 'metro cuadrado': ['a', 100], 'pie cuadrado': ['a', 9.290304],
+    'decímetro cuadrado': ['a', 1], par: ['p', 1], docena: ['p', 12] };
+  const ABR = { kilogramo: 'kg', gramo: 'g', libra: 'lb', litro: 'L', mililitro: 'ml', 'galón': 'gal', unidad: 'und', metro: 'm',
+    'centímetro': 'cm', yarda: 'yd', 'metro cuadrado': 'm²', 'pie cuadrado': 'pie²', 'decímetro cuadrado': 'dm²', par: 'par', docena: 'doc' };
+  const compat = u => UNI[u] ? Object.keys(UNI).filter(k => UNI[k][0] === UNI[u][0]) : [u];
+  const conv = (q, de, a) => (!UNI[de] || !UNI[a] || UNI[de][0] !== UNI[a][0]) ? q : q * UNI[de][1] / UNI[a][1];
+  // Llena un <select> de unidades según el insumo; conserva la unidad elegida si es compatible
+  function llenarUnidades(sel, base, elegida) {
+    const ops = compat(base || 'unidad'), u = ops.includes(elegida) ? elegida : (ops.includes(sel.value) ? sel.value : base);
+    sel.innerHTML = ops.map(o => `<option value="${o}" ${o === u ? 'selected' : ''}>${ABR[o] || o}</option>`).join('');
+    sel.disabled = ops.length < 2 && !base ? false : false;
+  }
+</script>
+<script>
+  // Navegación más ágil: precarga la página al pasar el mouse o tocar un enlace del menú,
+  // y muestra una barra de carga mientras llega la siguiente pantalla.
+  (() => {
+    const hechos = new Set(), barra = document.getElementById('carga');
+    const precargar = a => {
+      if (!a || !a.href || hechos.has(a.href) || a.target === '_blank' || a.hasAttribute('download')) return;
+      if (a.origin !== location.origin || a.href.includes('/logout') || a.href.includes('comprobante') || a.href.includes('excel')) return;
+      hechos.add(a.href);
+      const l = document.createElement('link'); l.rel = 'prefetch'; l.href = a.href; document.head.appendChild(l);
+    };
+    document.addEventListener('mouseover', e => precargar(e.target.closest('a')), { passive: true });
+    document.addEventListener('touchstart', e => precargar(e.target.closest('a')), { passive: true });
+    document.addEventListener('click', e => {
+      const a = e.target.closest('a');
+      if (a && a.href && a.origin === location.origin && !a.target && !a.hasAttribute('download') && !a.href.includes('#')
+          && !a.href.includes('descargar') && !a.href.includes('excel') && !e.ctrlKey && !e.metaKey) barra.classList.add('on');
+    });
+    document.addEventListener('submit', () => barra.classList.add('on'));
+    window.addEventListener('pageshow', () => barra.classList.remove('on'));
+  })();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

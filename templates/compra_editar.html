@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Editar compra{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Editar compra</h1><p>{{ c.insumo.nombre }} · {{ c.cantidad|num(3) }} {{ c.insumo.unidad }} · {{ c.costo_total|cop }}</p></div></div>
+<div class="card" style="max-width:620px">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+      <div class="field"><label>Fecha de compra</label><input class="input" type="date" name="fecha" max="{{ hoy }}" value="{{ request.form.fecha or c.fecha.date().isoformat() }}" required></div>
+      <div class="field"><label>Proveedor</label><input class="input" name="proveedor" value="{{ request.form.proveedor or c.proveedor or '' }}" placeholder="Opcional"></div>
+    </div>
+    <div class="field"><label>Nota</label><input class="input" name="nota" value="{{ request.form.nota or c.nota or '' }}" placeholder="Opcional"></div>
+    <div class="note" style="margin-bottom:14px">Aquí se cambian la fecha, el proveedor y la nota. Si la <b>cantidad</b> o el <b>valor</b> están mal, se anula la compra y se registra de nuevo, para que el inventario y el costo promedio queden correctos.</div>
+    <div class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('compras') }}">Cancelar</a></div>
+  </form>
+</div>
+{% endblock %}

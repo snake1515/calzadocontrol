@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Empleados{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Empleados</h1><p>Cortadores, guarnecedoras, montadores, soladores y terminado: cómo se les paga y cuánto destajo tienen pendiente.</p></div>
+  <div class="actions">
+    <a class="btn sec" href="{{ url_for('empleados', ver='' if ver == 'todos' else 'todos') }}">{{ 'Solo activos' if ver == 'todos' else 'Ver retirados' }}</a>
+    <a class="btn sec" href="{{ url_for('nomina_nueva') }}">✉ Liquidar nómina</a>
+    <a class="btn" href="{{ url_for('empleado_form') }}">＋ Nuevo empleado</a>
+  </div>
+</div>
+<div class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+  <div class="kpi"><div class="lbl">Empleados activos</div><div class="val">{{ items|selectattr('activo')|list|length }}</div></div>
+  <div class="kpi"><div class="lbl">Destajo pendiente de pago</div><div class="val">{{ total_pend|cop }}</div><div class="sub">Producción ya registrada, sin liquidar</div></div>
+  <div class="kpi hl"><div class="lbl">Pares este mes</div><div class="val">{{ pares_mes.values()|sum|num }}</div><div class="sub">sumando todos los procesos</div></div>
+</div>
+<div class="card">
+  <div class="table-wrap"><table>
+    <thead><tr><th>Empleado</th><th>Proceso</th><th>Forma de pago</th><th class="num">Salario</th><th class="num">Pares (mes)</th><th class="num">Destajo pendiente</th><th></th></tr></thead>
+    <tbody>
+    {% for e in items %}
+      <tr class="{{ 'anulada' if not e.activo }}">
+        <td><a href="{{ url_for('empleado_detalle', id=e.id) }}"><b>{{ e.nombre }}</b></a>{% if e.cargo %}<br><small>{{ e.cargo }}</small>{% endif %}</td>
+        <td>{{ e.proceso or '—' }}</td>
+        <td>{{ e.tipo_nombre }}</td>
+        <td class="num">{{ e.salario|cop if e.salario else '—' }}</td>
+        <td class="num">{{ (pares_mes.get(e.id) or 0)|num }}</td>
+        <td class="num"><b>{{ (pend.get(e.id) or 0)|cop }}</b></td>
+        <td class="r" style="white-space:nowrap">{% if e.whatsapp %}<a class="btn sec sm" href="{{ e.whatsapp }}" target="_blank">WhatsApp</a>{% endif %}
+          {% if e.activo %}<a class="btn sm" href="{{ url_for('nomina_nueva', empleado_id=e.id) }}">Liquidar</a>{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="empty">Aún no hay empleados. Regístralos para asignarles la mano de obra de cada lote y liquidar su nómina.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

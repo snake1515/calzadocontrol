@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if e else 'Nuevo' }} empleado{% endblock %}
+{% block content %}
+{% set F = request.form %}
+<div class="page-head"><div><h1>{{ 'Editar ' ~ e.nombre if e else 'Nuevo empleado' }}</h1><p>Datos básicos y forma de pago. El destajo se calcula solo con la producción registrada.</p></div></div>
+<div class="card" style="max-width:760px">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+      <div class="field"><label>Nombre completo</label><input class="input" name="nombre" value="{{ F.nombre or (e.nombre if e else '') }}" required></div>
+      <div class="field"><label>Cédula</label><input class="input" name="documento" value="{{ F.documento or (e.documento or '' if e else '') }}"></div>
+      <div class="field"><label>Teléfono</label><input class="input" name="telefono" value="{{ F.telefono or (e.telefono or '' if e else '') }}"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Cargo</label><input class="input" name="cargo" value="{{ F.cargo or (e.cargo or '' if e else '') }}" placeholder="Ej: Guarnecedora"></div>
+      <div class="field"><label>Proceso que hace normalmente</label><select class="input" name="proceso"><option value="">—</option>
+        {% set sp = F.proceso or (e.proceso if e else '') %}{% for p in procesos %}<option {{ 'selected' if p == sp }}>{{ p }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Fecha de ingreso</label><input class="input" type="date" name="fecha_ingreso" value="{{ F.fecha_ingreso or (e.fecha_ingreso.isoformat() if e and e.fecha_ingreso else '') }}"></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Forma de pago</label><select class="input" name="tipo_pago" id="tipo">
+        {% set st = F.tipo_pago or (e.tipo_pago if e else 'destajo') %}{% for k, v in tipos.items() %}<option value="{{ k }}" {{ 'selected' if k == st }}>{{ v }}</option>{% endfor %}</select></div>
+      <div class="field" id="salBox"><label>Salario mensual ($)</label><input class="input" type="number" min="0" step="any" name="salario" value="{{ F.salario or ('%g'|format(e.salario) if e and e.salario else '') }}"></div>
+    </div>
+    <p class="hint" id="tipoHint" style="margin-top:-6px"></p>
+    <label class="check" style="margin-bottom:14px"><input type="checkbox" name="aux_transporte" value="1" {{ 'checked' if (F.aux_transporte if F else (e.aux_transporte if e else True)) }}> <span>Recibe auxilio de transporte <small class="muted">(si gana hasta 2 salarios mínimos)</small></span></label>
+    {% if e %}<label class="check" style="margin-bottom:14px"><input type="checkbox" name="activo" value="1" {{ 'checked' if (F.activo if F else e.activo) }}> <span>Activo (desmarca si se retiró)</span></label>{% endif %}
+    <div class="field"><label>Nota</label><input class="input" name="nota" value="{{ F.nota or (e.nota or '' if e else '') }}" placeholder="Opcional"></div>
+    <div class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('empleado_detalle', id=e.id) if e else url_for('empleados') }}">Cancelar</a></div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const t = document.getElementById('tipo');
+  const H = { destajo: 'Se le paga lo que produce: la app suma la mano de obra de los lotes donde aparece.',
+    fijo: 'Sueldo mensual proporcional a los días. No hace falta asignarle mano de obra en cada lote.',
+    mixto: 'Sueldo básico + lo que produzca a destajo en los lotes.' };
+  const ui = () => { document.getElementById('salBox').style.display = t.value === 'destajo' ? 'none' : ''; document.getElementById('tipoHint').textContent = H[t.value]; };
+  t.addEventListener('change', ui); ui();
+</script>
+{% endblock %}

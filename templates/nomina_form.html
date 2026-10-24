@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Liquidar nómina{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Liquidar nómina</h1>
+  <p>Salario proporcional + destajo pendiente de la producción + aportes y prestaciones. Revisa y registra el pago.</p></div>
+  <a class="btn sec" href="{{ url_for('nominas') }}">← Nómina</a></div>
+<form method="post" id="f">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="calc" value="1">
+  <input type="hidden" name="accion" id="accion" value="calcular">
+  <div class="grid g-main">
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>1. Empleado y periodo</h2></div>
+        <div class="form-row">
+          <div class="field"><label>Empleado</label><select class="input" name="empleado_id" id="emp" required>
+            <option value="">— Elegir —</option>
+            {% for x in empleados %}<option value="{{ x.id }}" {{ 'selected' if emp and x.id == emp.id }}>{{ x.nombre }} · {{ x.tipo_nombre }}</option>{% endfor %}</select></div>
+          <div class="field"><label>Desde</label><input class="input recalc" type="date" name="desde" value="{{ desde }}"></div>
+          <div class="field"><label>Hasta</label><input class="input recalc" type="date" name="hasta" value="{{ hasta }}"></div>
+          <div class="field"><label>Días a pagar</label><input class="input" type="number" min="0" max="31" step="1" name="dias" value="{{ dias }}"><div class="hint">Quincena = 15 · mes = 30</div></div>
+        </div>
+      </div>
+      {% if emp %}
+      <div class="card">
+        <div class="card-head"><h2>2. Destajo del periodo</h2><span class="badge">{{ lineas|length }} línea{{ 's' if lineas|length != 1 }}</span></div>
+        {% if emp.tipo_pago == 'fijo' %}<p class="hint">{{ emp.nombre }} tiene salario fijo: no se le suma destajo.</p>{% else %}
+        <div class="table-wrap"><table>
+          <thead><tr><th>Fecha</th><th>Lote</th><th>Proceso</th><th>Detalle</th><th class="num">Valor</th></tr></thead>
+          <tbody>{% for l in lineas %}
+            <tr><td>{{ l.produccion.fecha|fecha }}</td><td><a href="{{ url_for('produccion_detalle', id=l.produccion_id) }}" target="_blank">#{{ l.produccion_id }}</a> <small>{{ l.produccion.producto.etiqueta }}</small></td>
+              <td>{{ l.proceso }}</td><td><small>{{ l.detalle }}</small></td><td class="num">{{ l.total|cop }}</td></tr>
+          {% else %}<tr><td colspan="5" class="empty">No hay destajo pendiente en este periodo.</td></tr>{% endfor %}</tbody>
+          {% if lineas %}<tfoot><tr><td colspan="4">Total destajo</td><td class="num">{{ calc.destajo|cop }}</td></tr></tfoot>{% endif %}
+        </table></div>{% endif %}
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>3. Novedades</h2></div>
+        <div class="form-row">
+          <div class="field"><label>Horas extra / recargos ($)</label><input class="input" type="number" min="0" step="any" name="horas_extra" value="{{ '%g'|format(extras.horas_extra) if extras.horas_extra else '' }}" placeholder="0"></div>
+          <div class="field"><label>Bonificaciones no salariales ($)</label><input class="input" type="number" min="0" step="any" name="bonificaciones" value="{{ '%g'|format(extras.bonificaciones) if extras.bonificaciones else '' }}" placeholder="0"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Otras deducciones ($)</label><input class="input" type="number" min="0" step="any" name="otras_deducciones" value="{{ '%g'|format(extras.otras_deducciones) if extras.otras_deducciones else '' }}" placeholder="0"></div>
+          <div class="field"><label>Concepto</label><input class="input" name="deducciones_detalle" value="{{ src.get('deducciones_detalle', '') }}" placeholder="Ej: anticipo del 10, préstamo"></div>
+        </div>
+        <label class="check"><input type="checkbox" class="recalc" name="seguridad_social" value="1" {{ 'checked' if ss }}> <span>Calcular seguridad social (salud y pensión 4% c/u al empleado; pensión 12%, ARL y caja 4% al empleador)</span></label>
+        <label class="check" style="margin-top:6px"><input type="checkbox" class="recalc" name="prestaciones" value="1" {{ 'checked' if pr }}> <span>Provisionar prestaciones (cesantías, intereses, prima y vacaciones)</span></label>
+        <div class="actions" style="margin-top:12px"><button class="btn sec sm" type="submit">↻ Recalcular</button></div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="card summary">
+      <h2>Liquidación</h2>
+      {% if calc %}
+        <div class="sum-line"><span>Salario básico ({{ calc.dias }} días)</span><b>{{ calc.basico|cop }}</b></div>
+        <div class="sum-line"><span>Auxilio de transporte</span><b>{{ calc.aux_transporte|cop }}</b></div>
+        <div class="sum-line"><span>Destajo</span><b>{{ calc.destajo|cop }}</b></div>
+        {% if calc.horas_extra %}<div class="sum-line"><span>Horas extra</span><b>{{ calc.horas_extra|cop }}</b></div>{% endif %}
+        {% if calc.bonificaciones %}<div class="sum-line"><span>Bonificaciones</span><b>{{ calc.bonificaciones|cop }}</b></div>{% endif %}
+        <div class="sum-line"><span><b>Devengado</b></span><b>{{ calc.devengado|cop }}</b></div>
+        <div class="sum-line"><span>Salud 4%</span><b>−{{ calc.deduccion_salud|cop }}</b></div>
+        <div class="sum-line"><span>Pensión 4%</span><b>−{{ calc.deduccion_pension|cop }}</b></div>
+        {% if calc.otras_deducciones %}<div class="sum-line"><span>Otras deducciones</span><b>−{{ calc.otras_deducciones|cop }}</b></div>{% endif %}
+        <div class="sum-total"><span>Neto a pagar</span><span>{{ calc.neto|cop }}</span></div>
+        <div class="sum-line" style="margin-top:8px"><span>Aportes del empleador</span><b>{{ calc.aportes|cop }}</b></div>
+        <div class="sum-line"><span>Provisión prestaciones</span><b>{{ calc.provisiones|cop }}</b></div>
+        <div class="sum-line"><span><b>Costo total para la fábrica</b></span><b>{{ calc.costo_empresa|cop }}</b></div>
+        <p class="hint">De ese costo, el destajo ({{ calc.destajo|cop }}) ya está dentro del costo de cada par. En los reportes se suma como gasto de nómina solo <b>{{ calc.gasto|cop }}</b>.</p>
+        <div class="form-row">
+          <div class="field"><label>Fecha de pago</label><input class="input" type="date" name="fecha_pago" value="{{ src.get('fecha_pago') or hoy }}"></div>
+          <div class="field"><label>Medio</label><select class="input" name="metodo">{% for m in metodos %}<option {{ 'selected' if src.get('metodo') == m }}>{{ m }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="field"><label>Nota</label><input class="input" name="nota" value="{{ src.get('nota', '') }}" placeholder="Opcional"></div>
+        <button class="btn block" type="submit" id="registrar">Registrar pago</button>
+      {% else %}
+        <p class="hint">Elige el empleado y el periodo para calcular.</p>
+      {% endif %}
+      <p class="hint" style="margin-top:10px">SMMLV {{ cfg.smmlv|cop }} · aux. transporte {{ cfg.aux_transporte|cop }} · ARL {{ '%g'|format(cfg.nom_arl_pct) }}%. <a href="{{ url_for('configuracion') }}">Cambiar</a>. Es una ayuda de control; la planilla PILA y la liquidación legal las valida tu contador.</p>
+    </div>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  const f = document.getElementById('f');
+  document.getElementById('emp').addEventListener('change', () => f.submit());
+  document.querySelectorAll('.recalc').forEach(e => e.addEventListener('change', () => {
+    if (e.type === 'date') f.querySelector('[name=dias]').value = '';
+    f.submit();
+  }));
+  const r = document.getElementById('registrar');
+  if (r) r.addEventListener('click', e => {
+    if (!confirm('¿Registrar este pago de nómina? El destajo mostrado quedará marcado como pagado.')) { e.preventDefault(); return; }
+    document.getElementById('accion').value = 'registrar';
+  });
+</script>
+{% endblock %}

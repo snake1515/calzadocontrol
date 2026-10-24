@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Configuración{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Configuración</h1><p>Regla de distribución del dinero y parámetros de nómina.</p></div></div>
+<h2 style="margin-bottom:10px">Regla de distribución</h2>
+<p class="hint" style="margin:-4px 0 12px">Cómo se reparte el dinero de cada día. Los tres porcentajes deben sumar 100%.</p>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div class="card">
+      <div class="form-row">
+        <div class="field"><label>Reinversión (%)</label><input class="input pct" type="number" step="any" min="0" max="100" name="pct_reinversion" value="{{ request.form.pct_reinversion or ('%g'|format(cfg.pct_reinversion)) }}"></div>
+        <div class="field"><label>Para el dueño (%)</label><input class="input pct" type="number" step="any" min="0" max="100" name="pct_dueno" value="{{ request.form.pct_dueno or ('%g'|format(cfg.pct_dueno)) }}"></div>
+        <div class="field"><label>Fondo de emergencia (%)</label><input class="input pct" type="number" step="any" min="0" max="100" name="pct_emergencia" value="{{ request.form.pct_emergencia or ('%g'|format(cfg.pct_emergencia)) }}"></div>
+      </div>
+      <div class="field"><label>¿Sobre qué se calcula?</label>
+        {% set b = request.form.base or cfg.base %}
+        <label class="check" style="font-weight:600;margin-bottom:8px"><input type="radio" name="base" value="ventas" {{ 'checked' if b == 'ventas' }}> <span>Sobre las <b>ventas</b> del día</span></label>
+        <div class="hint" style="margin:-4px 0 10px 24px">Se reparte todo lo vendido. La reinversión debe alcanzar para reponer el costo; si no, la app avisa.</div>
+        <label class="check" style="font-weight:600;margin-bottom:8px"><input type="radio" name="base" value="ganancia" {{ 'checked' if b == 'ganancia' }}> <span>Sobre la <b>ganancia</b> del día</span></label>
+        <div class="hint" style="margin:-4px 0 0 24px">Primero se separa el costo de lo vendido para reponer, y solo se reparte lo que se ganó. Es la opción más segura.</div>
+      </div>
+      <div class="actions"><button class="btn">Guardar regla</button><a class="btn sec" href="{{ url_for('distribucion') }}">Cancelar</a></div>
+    </div>
+    <div class="card summary">
+      <h2>Total</h2>
+      <div class="big-num" id="suma">100%</div>
+      <p class="hint" id="msg">Correcto.</p>
+    </div>
+  </div>
+</form>
+
+<h2 style="margin:28px 0 10px">Nómina</h2>
+<form method="post" class="card" style="max-width:860px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="seccion" value="nomina">
+  <div class="form-row">
+    <div class="field"><label>Salario mínimo mensual ($)</label><input class="input" type="number" step="any" min="0" name="smmlv" value="{{ '%g'|format(cfg.smmlv) }}"></div>
+    <div class="field"><label>Auxilio de transporte ($)</label><input class="input" type="number" step="any" min="0" name="aux_transporte" value="{{ '%g'|format(cfg.aux_transporte) }}"></div>
+    <div class="field"><label>Tarifa ARL (%)</label><input class="input" type="number" step="any" min="0" max="10" name="nom_arl_pct" value="{{ '%g'|format(cfg.nom_arl_pct) }}"><div class="hint">Riesgo I 0,522% · II 1,044% · III 2,436%. Confírmalo con tu ARL.</div></div>
+  </div>
+  <label class="check"><input type="checkbox" name="nom_aportes" value="1" {{ 'checked' if cfg.nom_aportes }}> <span>Por defecto, calcular seguridad social (salud, pensión, ARL y caja)</span></label>
+  <label class="check" style="margin-top:6px"><input type="checkbox" name="nom_prestaciones" value="1" {{ 'checked' if cfg.nom_prestaciones }}> <span>Por defecto, provisionar prestaciones sociales</span></label>
+  <label class="check" style="margin-top:6px"><input type="checkbox" name="nom_salud_empleador" value="1" {{ 'checked' if cfg.nom_salud_empleador }}> <span>La empresa paga salud del empleador (8,5%)</span></label>
+  <div class="hint" style="margin:2px 0 12px 24px">Normalmente no aplica a empleados que ganan menos de 10 salarios mínimos (exoneración). Pregúntale a tu contador.</div>
+  <div class="actions"><button class="btn">Guardar nómina</button></div>
+  <p class="hint" style="margin-top:10px">Valores 2026 por defecto: salario mínimo $1.750.905 y auxilio de transporte $249.095. Actualízalos cada enero. Estos ajustes solo cambian las liquidaciones nuevas.</p>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  const ins = [...document.querySelectorAll('.pct')];
+  function calc() {
+    const s = ins.reduce((a, e) => a + val(e), 0), el = document.getElementById('suma');
+    el.textContent = NUM(s, 2) + '%';
+    const ok = Math.abs(s - 100) < 0.01;
+    el.className = 'big-num ' + (ok ? 'pos' : 'neg');
+    document.getElementById('msg').textContent = ok ? 'Correcto.' : (s > 100 ? 'Sobran ' : 'Faltan ') + NUM(Math.abs(100 - s), 2) + ' puntos para llegar a 100%.';
+  }
+  ins.forEach(e => e.addEventListener('input', calc)); calc();
+</script>
+{% endblock %}

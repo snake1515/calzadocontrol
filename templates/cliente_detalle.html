@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ c.nombre }}{% endblock %}
+{% block content %}
+<style>
+  .mes-bars { display: flex; align-items: flex-end; gap: 10px; height: 150px; padding-top: 10px; }
+  .mes-bars .b { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .mes-bars .b span { width: 100%; max-width: 46px; background: var(--accent); border-radius: 6px 6px 0 0; min-height: 2px; }
+  .mes-bars .b small { margin-top: 6px; color: var(--muted); font-size: .75rem; white-space: nowrap; }
+  .mes-bars .b em { font-style: normal; font-weight: 800; font-size: .8rem; margin-bottom: 4px; }
+</style>
+<div class="page-head">
+  <div><h1>{{ c.nombre }} <span class="badge {{ m.estado_cls }}">{{ m.estado_txt }}</span></h1>
+    <p>{{ c.tipo or '' }}{% if c.identificacion %} · C.C./NIT {{ c.identificacion }}{% endif %}{% if c.telefono %} · {{ c.telefono }}{% endif %}{% if c.email %} · {{ c.email }}{% endif %}{% if c.direccion or c.ciudad %} · {{ c.direccion or '' }} {{ c.ciudad or '' }}{% endif %}{% if c.nota %} · <i>{{ c.nota }}</i>{% endif %}</p></div>
+  <div class="actions">
+    {% if c.whatsapp %}<a class="btn sec" href="{{ c.whatsapp }}" target="_blank">WhatsApp</a>{% endif %}
+    <a class="btn sec" href="{{ url_for('cliente_form', id=c.id) }}">Editar</a>
+    <a class="btn" href="{{ url_for('venta_nueva', cliente=c.id) }}">＋ Venderle</a>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Últimos 90 días</div><div class="val">{{ m.v90|cop }}</div>
+    <div class="sub">{{ m.u90|num }} pares{% if m.tendencia is not none %} · {% if m.tendencia >= 0 %}<span class="pos">▲ {{ m.tendencia|num(0) }}%</span>{% else %}<span class="neg">▼ {{ (-m.tendencia)|num(0) }}%</span>{% endif %} vs. 90 días antes{% endif %}</div></div>
+  <div class="kpi"><div class="lbl">Frecuencia</div><div class="val">{{ ('cada ' ~ (m.frecuencia|num(0)) ~ ' días') if m.frecuencia else '—' }}</div>
+    <div class="sub">{% if m.ultima %}Última compra {{ 'hoy' if m.dias == 0 else ('ayer' if m.dias == 1 else 'hace ' ~ m.dias ~ ' días') }}{% else %}Aún no compra{% endif %}</div></div>
+  <div class="kpi"><div class="lbl">Saldo por cobrar</div><div class="val {{ 'neg' if m.saldo > 0.5 }}">{{ m.saldo|cop }}</div>
+    <div class="sub">{% if m.vencido > 0.5 %}<span class="neg">{{ m.vencido|cop }} vencido</span>{% elif m.saldo > 0.5 %}Al día{% else %}Sin deudas{% endif %}{% if c.cupo %} · cupo disponible {{ m.cupo_disp|cop }}{% endif %}</div></div>
+  <div class="kpi hl"><div class="lbl">Histórico</div><div class="val">{{ m.total_v|cop }}</div><div class="sub">{{ m.total_u|num }} pares · {{ m.compras }} compras</div></div>
+</div>
+
+<div class="grid g-main">
+  <div>
+    {% if pendientes %}
+    <div class="card">
+      <div class="card-head"><h2>Documentos pendientes</h2>{% if recordatorio %}<a class="btn sm" href="{{ recordatorio }}" target="_blank">Enviar recordatorio por WhatsApp</a>{% endif %}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Documento</th><th>Vence</th><th class="num">Total</th><th class="num">Saldo</th><th>Estado</th></tr></thead>
+        <tbody>{% for v in pendientes %}{% set est = v.estado_pago %}
+          <tr><td><a href="{{ url_for('venta_detalle', id=v.id) }}">{{ num_doc(v) }}</a><br><small>{{ v.fecha|fecha }}</small></td><td>{{ v.vence|fecha }}</td>
+            <td class="num">{{ v.total_factura|cop }}</td><td class="num"><b class="neg">{{ v.saldo|cop }}</b></td><td><span class="badge {{ est[1] }}">{{ est[0] }}</span></td></tr>
+        {% endfor %}</tbody>
+      </table></div>
+    </div>
+    {% endif %}
+    <div class="card">
+      <div class="card-head"><h2>Pares comprados por mes</h2></div>
+      <div class="mes-bars">
+        {% for x in meses %}<div class="b"><em>{{ x.u|num if x.u else '' }}</em><span style="height:{{ (x.u / max_mes * 100)|round(1) }}%"></span><small>{{ x.etq }}</small></div>{% endfor %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Últimas compras</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Documento</th><th>Detalle</th><th>Estado</th><th class="num">Total</th></tr></thead>
+        <tbody>{% for v in ventas %}{% set est = v.estado_pago %}
+          <tr class="{{ 'anulada' if v.anulada }}"><td><a href="{{ url_for('venta_detalle', id=v.id) }}">{{ num_doc(v) }}</a><br><small>{{ v.fecha|fecha }}</small></td>
+            <td><small>{{ v.unidades }} pares · {% for it in v.items[:3] %}{{ it.producto.nombre }} T{{ it.talla }}×{{ it.cantidad }}{{ ', ' if not loop.last }}{% endfor %}{{ '…' if v.items|length > 3 }}</small></td>
+            <td><span class="badge {{ est[1] }}">{{ est[0] }}</span></td>
+            <td class="num">{{ v.total_factura|cop }}</td></tr>
+        {% else %}<tr><td colspan="4" class="empty">Aún no tiene compras registradas.</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="card-head"><h2>Condiciones</h2></div>
+      <div class="sum-line"><span>Plazo de crédito</span><b>{{ (c.plazo_dias ~ ' días') if c.plazo_dias else 'Solo contado' }}</b></div>
+      <div class="sum-line"><span>Cupo</span><b>{{ c.cupo|cop if c.cupo else 'Sin límite' }}</b></div>
+      <div class="sum-line"><span>Lista de precios</span><b>{{ 'Por mayor' if c.usa_precio_mayor else 'Detal' }}</b></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Referencias que más compra</h2></div>
+      {% for nom, u in favoritos %}<div class="sum-line"><span>{{ nom }}</span><b>{{ u|num }} pares</b></div>
+      {% else %}<p class="hint">Sin compras aún.</p>{% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

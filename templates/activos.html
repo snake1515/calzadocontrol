@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Máquinas (activos){% endblock %}
+{% block content %}
+<style>
+  .eq-meta { color: var(--muted); font-size: .84rem; }
+  .eq-bar { height: 10px; background: #edf2f6; border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
+  .eq-bar span { display: block; height: 100%; background: var(--ok); border-radius: 99px; }
+  .eq-row td { vertical-align: top; }
+  details.baja summary { cursor: pointer; color: var(--muted); font-size: .85rem; list-style: none; }
+  details.baja[open] { background: var(--bg); border-radius: 10px; padding: 10px; margin-top: 6px; }
+  @media (max-width: 820px) {
+    .eq-table thead { display: none; }
+    .eq-table tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .eq-table td { display: block; border: 0; padding: 3px 0; text-align: left !important; }
+    .eq-table td[data-l]::before { content: attr(data-l) ": "; color: var(--muted); font-size: .84rem; }
+    .eq-table td.r { margin-top: 6px; }
+  }
+</style>
+<div class="page-head">
+  <div><h1>Máquinas y herramientas (activos fijos)</h1><p>Guarnecedoras, troqueladora, desbastadora, prensa, hormas y troqueles. Se recuperan poco a poco con las ganancias.</p></div>
+  <a class="btn" href="{{ url_for('activo_form') }}">＋ Nueva máquina</a>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Valor de las máquinas</div><div class="val">{{ total_valor|cop }}</div><div class="sub">Lo invertido en máquinas en uso</div></div>
+  <div class="kpi hl"><div class="lbl">Cuota mensual</div><div class="val">{{ cuota_mes|cop }}</div><div class="sub">Lo que deben recuperar las ganancias cada mes</div></div>
+  <div class="kpi"><div class="lbl">Depreciación este mes</div><div class="val">{{ dep_mes|cop }}</div><div class="sub">Del 1 del mes a hoy</div></div>
+  <div class="kpi"><div class="lbl">Falta por recuperar</div><div class="val">{{ total_pendiente|cop }}</div></div>
+</div>
+
+<div class="card">
+  <div class="table-wrap"><table class="eq-table">
+    <thead><tr><th>Máquina / herramienta</th><th class="num">Valor</th><th class="num">Cuota / mes</th><th style="min-width:220px">Recuperado con ganancias</th><th class="num">Falta</th><th></th></tr></thead>
+    <tbody>
+    {% for f in filas %}{% set a = f.a %}
+      <tr class="eq-row">
+        <td><b>{{ a.nombre }}</b>
+          <div class="eq-meta">Comprado {{ a.fecha_compra.strftime('%d/%m/%Y') }} · vida útil {{ a.vida_util_meses }} meses{% if a.valor_residual %} · residual {{ a.valor_residual|cop }}{% endif %}</div>
+          {% if a.descripcion %}<div class="eq-meta">{{ a.descripcion }}</div>{% endif %}
+          {% if f.estado == 'baja' %}<span class="badge gray">De baja {{ a.fecha_baja.strftime('%d/%m/%Y') }}</span>{% if a.motivo_baja %} <small class="muted">{{ a.motivo_baja }}</small>{% endif %}
+          {% elif f.estado == 'recuperado' %}<span class="badge ok">Recuperado ✔</span>{% else %}<span class="badge">En uso</span>{% endif %}
+        </td>
+        <td class="num" data-l="Valor">{{ a.valor|cop }}</td>
+        <td class="num" data-l="Cuota mensual">{{ a.cuota_mensual|cop }}</td>
+        <td>
+          <div class="eq-bar"><span style="width:{{ [f.pct, 100]|min|round(1) }}%"></span></div>
+          <small><b>{{ f.acum|cop }}</b> de {{ a.depreciable|cop }} ({{ f.pct|num(1) }}%)
+          {% if f.estado == 'vigente' %}· faltan {{ f.meses_rest|num(1) }} meses{% endif %}</small>
+        </td>
+        <td class="num" data-l="Falta">{{ f.pendiente|cop if f.estado != 'baja' else '—' }}</td>
+        <td class="r" style="min-width:150px">
+          <a class="btn sec sm" href="{{ url_for('activo_form', id=a.id) }}">Editar</a>
+          <details class="baja">
+            <summary>Más opciones ▾</summary>
+            {% if f.estado == 'baja' %}
+              <form method="post" action="{{ url_for('activo_baja', id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="deshacer" value="1"><button class="btn sec sm" style="margin-top:6px">Volver a ponerlo en uso</button></form>
+            {% else %}
+              <form method="post" action="{{ url_for('activo_baja', id=a.id) }}" style="text-align:left;margin-top:6px">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label style="font-size:.8rem">Dar de baja (se dañó, se vendió…)</label>
+                <input class="input" type="date" name="fecha_baja" value="{{ hoy }}" style="margin-bottom:6px">
+                <input class="input" name="motivo" placeholder="Motivo" style="margin-bottom:6px">
+                <button class="btn sec sm">Dar de baja</button>
+              </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('activo_eliminar', id=a.id) }}" onsubmit="return confirm('¿Eliminar {{ a.nombre }}? Úsalo solo si se registró por error.')" style="margin-top:8px">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm">Eliminar (error)</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">Aún no hay máquinas. Registra la guarnecedora, la troqueladora, las hormas…</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="hint" style="margin-top:12px">Cada máquina se recupera en partes iguales durante su vida útil: <b>(valor − residual) ÷ meses</b>. Esa cuota se resta de la ganancia en el <a href="{{ url_for('inicio') }}">Resumen</a> y se separa antes de repartir en <a href="{{ url_for('distribucion') }}">Distribución</a>.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ titulo }}</h1><p>{{ detalle }}</p></div></div>
+<div class="card" style="max-width:620px">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field" style="max-width:260px"><label>Fecha</label><input class="input" type="date" name="fecha" max="{{ hoy }}" value="{{ request.form.fecha or obj.fecha.date().isoformat() }}" required></div>
+    <div class="field"><label>Nota</label><input class="input" name="nota" value="{{ request.form.nota or obj.nota or '' }}" placeholder="Opcional"></div>
+    <div class="note" style="margin-bottom:14px">Aquí se cambian la fecha y la nota. {{ ayuda }}</div>
+    <div class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ volver }}">Cancelar</a></div>
+  </form>
+</div>
+{% endblock %}

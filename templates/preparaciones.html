@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Semielaborados{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Semielaborados</h1><p>Lo que se elabora para usar en los zapatos y no se vende: plantillas armadas, contrafuertes, cortes por tarea.</p></div>
+  <div class="actions">
+    <form class="filters" method="get">
+      <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
+      <div class="field"><label>Hasta</label><input class="input" type="date" name="hasta" value="{{ hasta }}"></div>
+      <button class="btn sec">Filtrar</button>
+    </form>
+    <a class="btn" href="{{ url_for('preparacion_nueva') }}">◍ Registrar elaboración</a>
+  </div>
+</div>
+
+<div class="grid g-main">
+  <div class="card">
+    <div class="card-head"><h2>Elaboraciones registradas</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Semielaborado</th><th class="num">Cantidad</th><th class="num">Costo total</th><th class="num">Costo por unidad</th><th></th></tr></thead>
+      <tbody>
+      {% for p in items %}
+        <tr class="{{ 'anulada' if p.anulada }}">
+          <td><a href="{{ url_for('preparacion_detalle', id=p.id) }}">{{ p.fecha|fecha }}</a></td>
+          <td><b>{{ p.insumo.nombre }}</b>{% if p.anulada %} <span class="badge err">Anulada</span>{% endif %}</td>
+          <td class="num">{{ p.cantidad|num(3) }} {{ p.insumo.unidad }}</td>
+          <td class="num">{{ p.costo_total|cop }}</td>
+          <td class="num">{{ p.costo_unitario|cop }} / {{ p.insumo.unidad }}</td>
+          <td class="r">{% if not p.anulada %}<a class="btn sec sm" href="{{ url_for('preparacion_editar', id=p.id) }}">Editar</a>{% endif %}</td>
+        </tr>
+      {% else %}<tr><td colspan="6" class="empty">No hay elaboraciones en este periodo.</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Mis semielaborados</h2><a class="btn sec sm" href="{{ url_for('insumo_form', prep=1) }}">＋ Nueva</a></div>
+    {% for i in preps %}
+      <div class="sum-line">
+        <span><b>{{ i.nombre }}</b><br><small>Hay {{ i.stock|num(3) }} {{ i.unidad }} · {{ i.costo_promedio|cop }} / {{ i.unidad }}</small><br>
+          <small class="muted">Tanda: {% for r in i.receta_prep %}{{ r|cant_receta('componente', i.tanda_rinde or 1) }} de {{ r.componente.nombre }}{{ ', ' if not loop.last }}{% else %}sin receta{% endfor %} → rinde {{ (i.tanda_rinde or 1)|num(3) }} {{ i.unidad }}</small></span>
+        <a class="btn sm" style="align-self:center" href="{{ url_for('preparacion_nueva', insumo=i.id) }}">Elaborar</a>
+      </div>
+    {% else %}
+      <p class="hint">Aún no hay semielaborados. Crea el primero, por ejemplo «Plantilla armada», con su composición por par.</p>
+      <a class="btn sm" href="{{ url_for('insumo_form', prep=1) }}">＋ Crear semielaborado</a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

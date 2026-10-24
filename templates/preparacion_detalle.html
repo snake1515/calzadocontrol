@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Elaboración #{{ p.id }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Elaboración #{{ p.id }} · {{ p.insumo.nombre }} {% if p.anulada %}<span class="badge err">Anulada</span>{% endif %}</h1>
+    <p>{{ p.fecha|fecha(True) }}{% if p.usuario %} · registró {{ p.usuario.nombre }}{% endif %}</p></div>
+  <div class="actions"><a class="btn sec" href="{{ url_for('preparaciones') }}">← Volver</a>
+    {% if not p.anulada %}<a class="btn sec" href="{{ url_for('preparacion_editar', id=p.id) }}">Editar fecha</a>{% endif %}
+    <a class="btn" href="{{ url_for('preparacion_nueva', insumo=p.insumo_id) }}">Elaborar otra vez</a></div>
+</div>
+<div class="card">
+  <div class="flow">
+    <div class="box"><small>Entró</small>
+      {% for c in p.consumos %}<div><b>{{ c.cantidad|num(3) }}</b> {{ c.insumo.unidad }} de {{ c.insumo.nombre }}</div>{% endfor %}
+      {% if p.costo_mano_obra or p.costo_otros %}<div>+ mano de obra y otros costos</div>{% endif %}
+    </div>
+    <div class="arrow">→</div>
+    <div class="box"><small>Salió</small><div class="big-num">{{ p.cantidad|num(3) }}</div><div>{{ p.insumo.unidad }} de {{ p.insumo.nombre }}</div>
+      <div style="margin-top:6px"><span class="badge">{{ p.costo_unitario|cop }} / {{ p.insumo.unidad }}</span></div></div>
+  </div>
+</div>
+<div class="grid g2" style="margin-top:16px">
+  <div class="card">
+    <div class="card-head"><h2>Materiales consumidos</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Material</th><th class="num">Cantidad</th><th class="num">Costo unit.</th><th class="num">Total</th></tr></thead>
+      <tbody>{% for c in p.consumos %}<tr><td>{{ c.insumo.nombre }}</td><td class="num">{{ c.cantidad|num(3) }} {{ c.insumo.unidad }}</td><td class="num">{{ c.costo_unitario|cop }}</td><td class="num">{{ c.costo_total|cop }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Costo</h2></div>
+    <div class="sum-line"><span>Materiales</span><b>{{ p.costo_insumos|cop }}</b></div>
+    <div class="sum-line"><span>Mano de obra</span><b>{{ p.costo_mano_obra|cop }}</b></div>
+    <div class="sum-line"><span>Otros{% if p.otros_descripcion %}<br><small>{{ p.otros_descripcion }}</small>{% endif %}</span><b>{{ p.costo_otros|cop }}</b></div>
+    <div class="sum-total"><span>Total</span><span>{{ p.costo_total|cop }}</span></div>
+    <div class="sum-line"><span>Costo por {{ p.insumo.unidad }}</span><b>{{ p.costo_unitario|cop }}</b></div>
+    {% if p.nota %}<p class="hint">Nota: {{ p.nota }}</p>{% endif %}
+    {% if puede('admin') and not p.anulada %}
+    <form method="post" action="{{ url_for('preparacion_anular', id=p.id) }}" style="margin-top:14px" onsubmit="return confirm('¿Anular esta elaboración? Se descontará el semielaborado y los materiales volverán a la bodega.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm">Anular elaboración</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

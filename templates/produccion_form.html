@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}Registrar producción{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Registrar producción</h1>
+  <p>Lote terminado: materiales + mano de obra por procesos + indirectos = costo real de cada par.</p></div></div>
+{% if not productos %}
+  <div class="note warn">Primero crea una referencia con su ficha de consumo. <a href="{{ url_for('producto_form') }}">Crear referencia</a></div>
+{% else %}
+<form method="post" id="f">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>1. ¿Qué se terminó?</h2></div>
+        <div class="form-row wide-first">
+          <div class="field"><label>Referencia</label><select class="input" name="producto_id" id="prod" required>
+            <option value="">— Elegir —</option>
+            {% for p in productos %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
+          </select></div>
+          <div class="field"><label>Fecha</label><input class="input" type="date" name="fecha" id="fecha" value="{{ hoy }}"></div>
+          <div class="field"><label>Total pares</label><input class="input" id="cantTxt" readonly value="0"></div>
+        </div>
+        <label>Corrida (pares por talla)</label>
+        <div class="corrida" id="corrida"><p class="hint">Elige la referencia.</p></div>
+        <div class="actions" style="margin-top:10px">
+          <button type="button" class="btn sec sm" id="docena">Corrida de 1 docena</button>
+          <button type="button" class="btn sec sm" id="limpiar">Limpiar</button>
+          <span class="hint" style="margin:0">Corrida de 1 docena: reparte 12 pares concentrando las tallas del medio.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>2. Materiales utilizados</h2><button type="button" class="btn sec sm" id="fromRecipe">↻ Calcular según ficha</button></div>
+        <p class="hint" id="recipeNote" style="margin:-4px 0 10px">Se llenan solos con la ficha × pares. Si gastaste más o menos (desperdicio de cuero, sobrante), ajústalos.</p>
+        <div class="table-wrap"><table class="lines">
+          <thead><tr><th>Material</th><th class="num">Cantidad usada</th><th>Unidad</th><th class="num">En bodega</th><th class="num">Costo</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table></div>
+        <button type="button" class="btn sec sm" id="add" style="margin-top:10px">＋ Agregar otro material</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>3. Mano de obra por proceso</h2><button type="button" class="btn sec sm" id="fromProc">↻ Tarifas de la referencia</button></div>
+        <p class="hint" style="margin:-4px 0 10px">Quién hizo cada proceso y cuánto se le paga. El destajo de empleados registrados queda pendiente para liquidarlo en <b>Nómina</b>.</p>
+        <div class="table-wrap"><table class="lines">
+          <thead><tr><th>Proceso</th><th>Quién</th><th>Pago</th><th class="num">Valor</th><th class="num">Pares</th><th class="num">Total</th><th></th></tr></thead>
+          <tbody id="moRows"></tbody>
+        </table></div>
+        <button type="button" class="btn sec sm" id="addMo" style="margin-top:10px">＋ Agregar proceso</button>
+        <datalist id="procList">{% for p in procesos %}<option value="{{ p }}">{% endfor %}</datalist>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>4. Costos indirectos de este lote <small class="muted">(opcional)</small></h2></div>
+        <p class="hint" style="margin:-6px 0 10px">Si pagas los servicios cada mes en <b>Gastos y servicios</b>, déjalos en 0 aquí para no contarlos dos veces.</p>
+        <div class="form-row c4">
+          <div class="field"><label>Energía eléctrica</label><input class="input ind" type="number" step="any" min="0" name="costo_energia" id="cEn" placeholder="0"></div>
+          <div class="field"><label>Agua / gas</label><input class="input ind" type="number" step="any" min="0" name="costo_gas_agua" id="cGa" placeholder="0"></div>
+          <div class="field"><label>Transporte / maquila</label><input class="input ind" type="number" step="any" min="0" name="costo_transporte" id="cTr" placeholder="0"></div>
+          <div class="field"><label>Otros</label><input class="input ind" type="number" step="any" min="0" name="costo_otros" id="cOt" placeholder="0"></div>
+        </div>
+        <div class="field" id="otrosBox" style="display:none"><label>¿Qué son los «otros»?</label><input class="input" name="otros_descripcion" id="otrosDesc" placeholder="Ej: troquel nuevo, cajas especiales, bordado externo"></div>
+        <div class="field"><label>Nota</label><input class="input" name="nota" id="nota" placeholder="Opcional · ej: orden del almacén X"></div>
+      </div>
+    </div>
+
+    <div class="card summary">
+      <h2>Resultado del lote</h2>
+      <div class="flow" style="margin:14px 0">
+        <div class="box"><small>Costo total</small><div style="font-weight:800" id="sTot">$ 0</div></div>
+        <div class="arrow">→</div>
+        <div class="box"><small>Pares</small><div style="font-weight:800" id="sCant">0</div></div>
+      </div>
+      <div class="sum-line"><span>Materiales</span><b id="sIns">$ 0</b></div>
+      <div class="sum-line"><span>Mano de obra</span><b id="sMo">$ 0</b></div>
+      <div class="sum-line"><span>Indirectos</span><b id="sInd">$ 0</b></div>
+      <div class="sum-total"><span>Costo por par</span><span id="sUnit">$ 0</span></div>
+      <div class="sum-line"><span>Precio al detal</span><b id="sPv">$ 0</b></div>
+      <div class="sum-line"><span>Ganancia por par</span><b id="sGu">$ 0</b></div>
+      <div class="sum-line"><span>Ganancia si vendes todo</span><b id="sGt">$ 0</b></div>
+      <div id="stockWarn" class="note warn" style="display:none;margin-top:10px"></div>
+      <button class="btn block" style="margin-top:14px">Registrar producción</button>
+      <a class="btn sec block" style="margin-top:8px" href="{{ url_for('producciones') }}">Cancelar</a>
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+const PRODS = {{ productos|tojson }};
+const INS = {{ insumos|tojson }};
+const EMPS = {{ empleados|tojson }};
+const MODOS = {{ modos|tojson }};
+const PRE = {{ prefill|tojson }};
+const PRESEL = {{ preseleccion|tojson }};
+const $ = id => document.getElementById(id);
+if ($('rows')) {
+  const rows = $('rows'), moRows = $('moRows');
+  const ins = id => INS.find(i => i.id == id);
+  const prod = () => PRODS.find(p => p.id == $('prod').value);
+  let editado = false, moEditado = false;
+
+  const pares = () => [...document.querySelectorAll('.cIn')].reduce((s, e) => s + Math.max(Math.round(val(e)), 0), 0);
+  function dibujarCorrida(valores = {}) {
+    const p = prod(), box = $('corrida');
+    if (!p) { box.innerHTML = '<p class="hint">Elige la referencia.</p>'; return; }
+    box.innerHTML = p.tallas.map(t => `<div><label>T ${t}</label><input type="hidden" name="corrida_talla[]" value="${t}"><input class="input cIn" type="number" min="0" step="1" name="corrida_cant[]" value="${valores[t] || ''}" placeholder="0"></div>`).join('');
+    box.querySelectorAll('.cIn').forEach(i => i.addEventListener('input', onCant));
+  }
+  function docena() {
+    const p = prod(); if (!p) return;
+    const ts = p.tallas, n = ts.length, w = ts.map((_, i) => n - Math.abs(i - (n - 1) / 2) * 1.6);
+    const s = w.reduce((a, b) => a + Math.max(b, .5), 0); let rep = w.map(x => Math.max(Math.round(Math.max(x, .5) / s * 12), 0));
+    let dif = 12 - rep.reduce((a, b) => a + b, 0), mid = Math.floor((n - 1) / 2);
+    while (dif !== 0) { rep[mid] += Math.sign(dif); dif -= Math.sign(dif); }
+    const v = {}; ts.forEach((t, i) => v[t] = rep[i] || ''); dibujarCorrida(v); onCant();
+  }
+
+  function opts(sel) {
+    let h = '<option value="">— Elegir —</option>', g = null;
+    INS.forEach(i => { const gr = i.prep ? 'Semielaborados' : i.cat;
+      if (gr !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${gr}">`; g = gr; }
+      h += `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre}</option>`; });
+    return h + '</optgroup>';
+  }
+  function addRow(sel = '', cant = '', uni = '') {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="min-width:180px"><select class="input iSel" name="consumo_insumo[]">${opts(sel)}</select></td>
+      <td><input class="input r" type="number" step="any" min="0" name="consumo_cantidad[]" value="${cant}" style="min-width:80px"></td>
+      <td><select class="input uSel" name="consumo_unidad[]" style="min-width:76px"></select></td><td class="num st"></td><td class="num co">—</td>
+      <td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
+    const iSel = tr.querySelector('.iSel'), uSel = tr.querySelector('.uSel');
+    llenarUnidades(uSel, (ins(sel) || {}).unidad, uni);
+    iSel.addEventListener('change', () => llenarUnidades(uSel, (ins(iSel.value) || {}).unidad));
+    tr.querySelector('.btn-icon').onclick = () => { tr.remove(); editado = true; calc(); };
+    tr.querySelectorAll('input,select').forEach(e => e.addEventListener('input', () => { editado = true; calc(); }));
+    rows.appendChild(tr);
+  }
+  function empOpts(sel) {
+    return '<option value="">Externo / otro</option>' + EMPS.map(e => `<option value="${e.id}" ${e.id == sel ? 'selected' : ''}>${e.nombre}${e.tipo === 'fijo' ? ' (sueldo fijo)' : ''}</option>`).join('');
+  }
+  function addMo(m = {}) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="min-width:120px"><input class="input mP" name="mo_proceso[]" list="procList" value="${m.proceso || ''}" placeholder="Proceso"></td>
+      <td style="min-width:130px"><select class="input mE" name="mo_empleado[]">${empOpts(m.empleado)}</select>
+        <input class="input mR" name="mo_responsable[]" value="${m.responsable || ''}" placeholder="Nombre (taller externo…)" style="margin-top:4px"></td>
+      <td><select class="input mM" name="mo_modo[]" style="min-width:96px">${Object.entries(MODOS).map(([k, v]) => `<option value="${k}" ${k === (m.modo || 'par') ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
+      <td><input class="input r mV" type="number" step="any" min="0" name="mo_valor[]" value="${m.valor || ''}" style="min-width:76px"></td>
+      <td><input class="input r mN" type="number" step="1" min="0" name="mo_pares[]" value="${m.pares || ''}" placeholder="todos" style="width:64px"></td>
+      <td class="num mT">—</td><td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
+    const e = tr.querySelector('.mE'), r = tr.querySelector('.mR'), p = tr.querySelector('.mP');
+    const ui = () => { r.style.display = e.value ? 'none' : ''; };
+    e.addEventListener('change', () => { ui(); const em = EMPS.find(x => x.id == e.value); if (em && em.proceso && !p.value) p.value = em.proceso; });
+    if (!m.empleado && m.proceso) { const em = EMPS.find(x => x.proceso === m.proceso); if (em && !m.responsable) e.value = em.id; }
+    ui();
+    tr.querySelector('.btn-icon').onclick = () => { tr.remove(); moEditado = true; calc(); };
+    tr.querySelectorAll('input,select').forEach(x => x.addEventListener('input', () => { moEditado = true; calc(); }));
+    moRows.appendChild(tr);
+  }
+  function desdeReceta() {
+    rows.innerHTML = '';
+    const p = prod(), q = pares();
+    if (p && p.receta.length) {
+      p.receta.forEach(r => addRow(r.insumo_id, q > 0 ? +(r.cantidad * q).toFixed(4) : '', r.unidad));
+      $('recipeNote').textContent = 'Calculado con la ficha × ' + (q || 0) + ' pares. Ajusta si gastaste más o menos.';
+    } else {
+      addRow();
+      $('recipeNote').textContent = p ? 'Esta referencia no tiene ficha de consumo: agrega a mano los materiales.' : 'Elige la referencia y la corrida.';
+    }
+    editado = false; calc();
+  }
+  function desdeProcesos() {
+    moRows.innerHTML = '';
+    const p = prod();
+    if (p && p.procesos.length) p.procesos.forEach(x => addMo({ proceso: x.proceso, valor: x.valor, modo: 'par' }));
+    else addMo();
+    moEditado = false; calc();
+  }
+  function onCant() {
+    if (!editado) desdeReceta();
+    else { $('recipeNote').innerHTML = '<b>Cambió la corrida.</b> Pulsa «Calcular según ficha» para actualizar los materiales.'; calc(); }
+  }
+  function onProd() { dibujarCorrida(); desdeProcesos(); onCant(); }
+  function calc() {
+    let cIns = 0; const avisos = [], uso = {};
+    rows.querySelectorAll('tr').forEach(tr => {
+      const i = ins(tr.querySelector('.iSel').value), u = tr.querySelector('.uSel').value;
+      const q = i ? conv(val(tr.querySelector('input')), u, i.unidad) : 0;
+      tr.querySelector('.st').textContent = i ? NUM(conv(i.stock, i.unidad, u), 2) + ' ' + (ABR[u] || u) : '';
+      tr.querySelector('.co').textContent = i ? COP(q * i.costo) : '—';
+      if (i) { cIns += q * i.costo; uso[i.id] = (uso[i.id] || 0) + q; }
+    });
+    for (const id in uso) { const i = ins(id); if (uso[id] > i.stock + 1e-9) avisos.push(`${i.nombre}: necesitas ${NUM(uso[id], 3)} y hay ${NUM(i.stock, 3)} ${i.unidad}`); }
+    const q = pares();
+    let cMo = 0;
+    moRows.querySelectorAll('tr').forEach(tr => {
+      const m = tr.querySelector('.mM').value, v = val(tr.querySelector('.mV')), np = Math.round(val(tr.querySelector('.mN'))) || q;
+      const t = m === 'par' ? v * np : m === 'docena' ? v * np / 12 : v;
+      tr.querySelector('.mT').textContent = v ? COP(t) : '—'; cMo += t;
+    });
+    const cInd = [...document.querySelectorAll('.ind')].reduce((s, e) => s + val(e), 0);
+    const tot = cIns + cMo + cInd, unit = q > 0 ? tot / q : 0, p = prod(), pv = p ? p.precio : 0;
+    $('cantTxt').value = q;
+    $('sIns').textContent = COP(cIns); $('sMo').textContent = COP(cMo); $('sInd').textContent = COP(cInd);
+    $('sTot').textContent = COP(tot); $('sCant').textContent = NUM(q, 0); $('sUnit').textContent = COP(unit);
+    $('sPv').textContent = COP(pv);
+    const gu = pv - unit; $('sGu').textContent = q ? COP(gu) : '—'; $('sGu').className = gu >= 0 ? 'pos' : 'neg';
+    const gt = pv * q - tot; $('sGt').textContent = q ? COP(gt) : '—'; $('sGt').className = gt >= 0 ? 'pos' : 'neg';
+    $('otrosBox').style.display = val($('cOt')) > 0 ? '' : 'none';
+    $('otrosDesc').required = val($('cOt')) > 0;
+    $('stockWarn').style.display = avisos.length ? '' : 'none';
+    $('stockWarn').innerHTML = '<b>No alcanzan los materiales:</b><br>' + avisos.join('<br>');
+  }
+
+  $('prod').addEventListener('change', onProd);
+  $('fromRecipe').onclick = desdeReceta;
+  $('fromProc').onclick = desdeProcesos;
+  $('docena').onclick = docena;
+  $('limpiar').onclick = () => { dibujarCorrida(); onCant(); };
+  $('add').onclick = () => { addRow(); editado = true; calc(); };
+  $('addMo').onclick = () => { addMo(); moEditado = true; calc(); };
+  ['cEn', 'cGa', 'cTr', 'cOt'].forEach(id => $(id).addEventListener('input', calc));
+
+  if (PRE) {
+    const map = { producto_id: 'prod', fecha: 'fecha', costo_energia: 'cEn', costo_gas_agua: 'cGa',
+      costo_transporte: 'cTr', costo_otros: 'cOt', otros_descripcion: 'otrosDesc', nota: 'nota' };
+    for (const k in map) if (PRE[k] !== undefined && PRE[k] !== '') $(map[k]).value = PRE[k];
+    dibujarCorrida(PRE.corrida || {});
+    (PRE.consumos.length ? PRE.consumos : [{ insumo_id: '', cantidad: '' }]).forEach(c => addRow(c.insumo_id, c.cantidad, c.unidad));
+    (PRE.mo.length ? PRE.mo : [{}]).forEach(m => addMo(m));
+    editado = moEditado = true; calc();
+  } else {
+    if (PRESEL) $('prod').value = PRESEL;
+    onProd();
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Registrar compra{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Registrar compra</h1><p>Escribe la cantidad y lo que pagaste en total por cada material (cuero por pie², suelas por par, pegante por galón…). El costo promedio se recalcula solo.</p></div></div>
+{% if puede('admin') %}
+<div class="seg-tabs" style="margin-bottom:16px"><a class="on">Materiales</a><a href="{{ url_for('activo_form', origen='compras') }}">Máquina o herramienta</a></div>
+{% endif %}
+<form method="post" id="f">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div class="card">
+      <div class="form-row">
+        <div class="field"><label>Fecha</label><input class="input" type="date" name="fecha" value="{{ request.form.fecha or hoy }}"></div>
+        <div class="field"><label>Proveedor</label><input class="input" name="proveedor" value="{{ request.form.proveedor }}" placeholder="Opcional"></div>
+      </div>
+      {% if not insumos %}
+        <div class="note warn">Primero crea tus materiales. <a href="{{ url_for('insumo_form') }}">Crear material</a></div>
+      {% endif %}
+      <div class="table-wrap"><table class="lines">
+        <thead><tr><th>Material</th><th class="num">Cantidad</th><th class="num">Total pagado</th><th class="num">Costo unit.</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+      <button type="button" class="btn sec sm" id="add" style="margin-top:10px">＋ Agregar material</button>
+      <div class="field" style="margin-top:16px"><label>Nota</label><input class="input" name="nota" value="{{ request.form.nota }}" placeholder="Ej: factura #123"></div>
+    </div>
+    <div class="card summary">
+      <h2>Total de la compra</h2>
+      <div class="big-num" id="tot">$ 0</div>
+      <p class="hint" id="cnt">0 materiales</p>
+      <button class="btn block" style="margin-top:12px">Guardar compra</button>
+      <a class="btn sec block" style="margin-top:8px" href="{{ url_for('compras') }}">Cancelar</a>
+    </div>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const INS = {{ insumos|tojson }};
+const rows = document.getElementById('rows');
+function opts(sel) {
+  return '<option value="">— Elegir —</option>' + INS.map(i =>
+    `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre} (${i.unidad})</option>`).join('');
+}
+function addRow(sel = '', cant = '', costo = '') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td style="min-width:200px"><select class="input" name="insumo_id[]">${opts(sel)}</select></td>
+    <td><input class="input r" type="number" step="any" min="0" name="cantidad[]" value="${cant}" style="min-width:90px"></td>
+    <td><input class="input r" type="number" step="any" min="0" name="costo[]" value="${costo}" style="min-width:110px"></td>
+    <td class="num cu">—</td>
+    <td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
+  tr.querySelector('.btn-icon').onclick = () => { tr.remove(); calc(); };
+  tr.querySelectorAll('input,select').forEach(e => e.addEventListener('input', calc));
+  rows.appendChild(tr); calc();
+}
+function calc() {
+  let t = 0, c = 0;
+  rows.querySelectorAll('tr').forEach(tr => {
+    const [sel] = tr.querySelectorAll('select'); const [q, p] = tr.querySelectorAll('input');
+    const cant = val(q), costo = val(p), ins = INS.find(i => i.id == sel.value);
+    tr.querySelector('.cu').textContent = cant > 0 ? COP(costo / cant) + (ins ? ' /' + ins.unidad : '') : '—';
+    if (sel.value) { t += costo; c++; }
+  });
+  document.getElementById('tot').textContent = COP(t);
+  document.getElementById('cnt').textContent = c + (c === 1 ? ' material' : ' materiales');
+}
+document.getElementById('add').onclick = () => addRow();
+const pre = new URLSearchParams(location.search).get('insumo');
+addRow(pre || '');
+</script>
+{% endblock %}

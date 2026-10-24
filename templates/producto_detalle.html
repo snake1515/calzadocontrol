@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ prod.etiqueta }}{% endblock %}
+{% block content %}
+{% set cap, lim = prod.capacidad %}
+<div class="page-head">
+  <div><h1>{{ prod.etiqueta }}</h1><p>{{ prod.linea }}{% if prod.material %} · {{ prod.material }}{% endif %} · tallas {{ prod.talla_min }} a {{ prod.talla_max }}{% if prod.descripcion %} · {{ prod.descripcion }}{% endif %}</p></div>
+  <div class="actions">
+    {% if puede('admin') %}<a class="btn sec" href="{{ url_for('producto_form', id=prod.id) }}">Editar ficha y precios</a>{% endif %}
+    <a class="btn sec" href="{{ url_for('ajuste_nuevo', producto=prod.id) }}">⇡ Egreso</a>
+    <a class="btn" href="{{ url_for('produccion_nueva', producto=prod.id) }}">⚙ Producir</a>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="lbl">En bodega</div><div class="val">{{ prod.stock|num }} <small style="font-size:.9rem">pares</small></div><div class="sub">Valor {{ (prod.stock * prod.costo_promedio)|cop }}</div></div>
+  <div class="kpi"><div class="lbl">Costo real por par</div><div class="val">{{ prod.costo_promedio|cop }}</div><div class="sub">Estándar: {{ prod.costo_estandar|cop }} (mat. {{ prod.costo_receta|cop }} + M.O. {{ prod.costo_mo_estandar|cop }})</div></div>
+  <div class="kpi"><div class="lbl">Precio detal / mayor</div><div class="val">{{ prod.precio_venta|cop }}</div>
+    {% set g = prod.precio_venta - prod.costo_ref %}
+    <div class="sub">Mayor {{ (prod.precio_mayor or prod.precio_venta)|cop }} · ganancia detal <b class="{{ 'pos' if g >= 0 else 'neg' }}">{{ g|cop }}</b></div></div>
+  <div class="kpi hl"><div class="lbl">Puedo hacer hoy</div><div class="val">{{ cap|num if cap is not none else '—' }}</div>
+    <div class="sub">{{ ('Limita: ' ~ lim.nombre) if lim else 'Define la ficha de consumo' }}</div></div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2>Existencias por talla</h2><span class="badge berry">Vendidos histórico: {{ vendidos|num }} pares</span></div>
+  <div class="tallas">
+    {% for t, s in prod.stock_por_talla.items() %}
+      <div class="talla {{ 'cero' if s <= 0 }}" style="min-width:64px;padding:8px"><small>Talla {{ t }}</small><b style="font-size:1.25rem">{{ s }}</b><small>vend. {{ vend_talla.get(t, 0) }}</small></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="grid g2">
+  <div>
+    <div class="card">
+      <div class="card-head"><h2>Ficha de consumo por par</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Material</th><th class="num">Cantidad</th><th class="num">Costo</th><th class="num">En bodega</th><th class="num">Alcanza</th></tr></thead>
+        <tbody>
+        {% for r in prod.receta %}
+          <tr {% if lim and r.insumo_id == lim.id %}style="background:var(--warn-soft)"{% endif %}>
+            <td>{{ r.insumo.nombre }}</td>
+            <td class="num">{{ r|cant_receta }}</td>
+            <td class="num">{{ (r.cantidad * r.insumo.costo_promedio)|cop }}</td>
+            <td class="num">{{ r.insumo.stock|num(2) }} {{ r.insumo.unidad }}</td>
+            <td class="num">{{ ((r.insumo.stock if r.insumo.stock > 0 else 0) // r.cantidad)|int|num }} pares</td>
+          </tr>
+        {% else %}<tr><td colspan="5" class="empty">Sin ficha. Edita la referencia para agregarla.</td></tr>{% endfor %}
+        </tbody>
+        {% if prod.receta %}<tfoot><tr><td colspan="2">Materiales por par</td><td class="num">{{ prod.costo_receta|cop }}</td><td colspan="2"></td></tr></tfoot>{% endif %}
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Mano de obra por proceso</h2></div>
+      {% for p in prod.procesos %}<div class="sum-line"><span>{{ p.proceso }}</span><b>{{ p.valor_par|cop }} / par · {{ (p.valor_par * 12)|cop }} / doc</b></div>
+      {% else %}<p class="hint">Sin tarifas de destajo definidas.</p>{% endfor %}
+      {% if prod.procesos %}<div class="sum-total"><span>Total por par</span><span>{{ prod.costo_mo_estandar|cop }}</span></div>{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Últimas producciones</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Corrida</th><th class="num">Pares</th><th class="num">C/par</th></tr></thead>
+      <tbody>
+      {% for p in prods %}
+        <tr class="{{ 'anulada' if p.anulada }}"><td><a href="{{ url_for('produccion_detalle', id=p.id) }}">{{ p.fecha|fecha }}</a></td><td><small>{{ p.corrida_txt }}</small></td><td class="num">{{ p.cantidad|num }}</td><td class="num">{{ p.costo_unitario|cop }}</td></tr>
+      {% else %}<tr><td colspan="4" class="empty">Aún no se ha producido esta referencia.</td></tr>{% endfor %}
+      </tbody>
+    </table></div>
+    {% if puede('admin') %}<p class="hint" style="margin-top:10px">Ganancia bruta acumulada con esta referencia: <b>{{ ganancia_hist|cop }}</b></p>{% endif %}
+  </div>
+</div>
+{% endblock %}

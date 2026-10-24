@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Reportes{% endblock %}
+{% block content %}
+<style>
+  .seg { display: inline-flex; border: 1px solid #cfd9e3; border-radius: 9px; overflow: hidden; background: #fff; }
+  .seg a { padding: 8px 14px; font-weight: 700; color: var(--ink); text-decoration: none; border-right: 1px solid #cfd9e3; }
+  .seg a:last-child { border-right: 0; }
+  .seg a.on { background: var(--nav); color: #fff; }
+  .rep-table th, .rep-table td { white-space: nowrap; }
+  .rep-table td:first-child, .rep-table th:first-child { position: sticky; left: 0; background: var(--panel); z-index: 1; }
+  .rep-table tfoot td:first-child { background: var(--panel); }
+  .col-neta { background: #f3fbf7; }
+</style>
+<div class="page-head">
+  <div><h1>Reportes</h1><p>Compras, producción, ventas, nómina, gastos y ganancias del {{ desde }} al {{ hasta }}.</p></div>
+  <a class="btn" href="{{ url_for('reportes_excel', agrupar=agrupar, desde=desde, hasta=hasta) }}">⇣ Descargar Excel</a>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <form class="filters" method="get" id="ff">
+    <div class="field"><label>Agrupar</label>
+      <div class="seg">{% for k, v in agrupaciones.items() %}<a href="{{ url_for('reportes', agrupar=k) }}" class="{{ 'on' if k == agrupar }}">{{ v }}</a>{% endfor %}</div>
+      <input type="hidden" name="agrupar" value="{{ agrupar }}">
+    </div>
+    <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
+    <div class="field"><label>Hasta</label><input class="input" type="date" name="hasta" value="{{ hasta }}"></div>
+    <button class="btn sec">Ver</button>
+  </form>
+</div>
+
+{% set t = rep.tot %}
+<div class="kpis">
+  <div class="kpi"><div class="lbl">Ventas</div><div class="val">{{ t.ventas|cop }}</div><div class="sub">{{ t.num_ventas|num }} ventas · {{ t.unid_vend|num }} pares</div></div>
+  <div class="kpi"><div class="lbl">Compras</div><div class="val">{{ (t.compras + t.compras_eq)|cop }}</div><div class="sub">Materiales {{ t.compras|cop }} · máquinas {{ t.compras_eq|cop }}</div></div>
+  <div class="kpi"><div class="lbl">Costos + gastos</div><div class="val">{{ (t.costo_vend + t.nomina + t.equipos + t.gastos)|cop }}</div><div class="sub">Vendido {{ t.costo_vend|cop }} · nómina {{ t.nomina|cop }} · máquinas {{ t.equipos|cop }} · gastos {{ t.gastos|cop }}</div></div>
+  <div class="kpi hl"><div class="lbl">Ganancia neta</div><div class="val {{ 'pos' if t.neta >= 0 else 'neg' }}">{{ t.neta|cop }}</div><div class="sub">{% if t.margen is not none %}Margen neto {{ t.margen|num(1) }}%{% else %}Sin ventas{% endif %} · bruta {{ t.bruta|cop }}</div></div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>{{ agrupaciones[agrupar] }}: ventas, compras y ganancia neta</h2></div>
+  <div style="height:280px"><canvas id="ch"></canvas></div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>Detalle {{ agrupaciones[agrupar]|lower }}</h2><small class="muted">Desliza la tabla hacia los lados en el celular</small></div>
+  <div class="table-wrap"><table class="rep-table">
+    <thead><tr><th>Periodo</th>{% for c, titulo, d in columnas %}<th class="num {{ 'col-neta' if c == 'neta' }}">{{ titulo }}</th>{% endfor %}<th class="num">Margen neto</th></tr></thead>
+    <tbody>
+    {% for f in rep.filas|reverse %}
+      <tr>
+        <td><b>{{ f.periodo }}</b></td>
+        {% for c, titulo, dinero in columnas %}
+          <td class="num {{ 'col-neta' if c == 'neta' }} {{ ('pos' if f[c] >= 0 else 'neg') if c in ('bruta', 'neta') and f[c] else '' }}">
+            {% if f[c] %}{{ f[c]|cop if dinero else f[c]|num }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        {% endfor %}
+        <td class="num">{{ (f.margen|num(1) ~ '%') if f.margen is not none else '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td>Total</td>{% for c, titulo, dinero in columnas %}<td class="num {{ 'col-neta' if c == 'neta' }}">{{ t[c]|cop if dinero else t[c]|num }}</td>{% endfor %}<td class="num">{{ (t.margen|num(1) ~ '%') if t.margen is not none else '—' }}</td></tr></tfoot>
+  </table></div>
+</div>
+
+<div class="grid g2" style="margin-top:16px">
+  <div class="card">
+    <div class="card-head"><h2>Por referencia</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Referencia</th><th class="num">Pares</th><th class="num">Ventas</th><th class="num">Ganancia bruta</th></tr></thead>
+      <tbody>{% for p in rep.por_ref %}
+        <tr><td>{{ p.nombre }}<br><small>{{ p.linea }}</small></td><td class="num">{{ p.unidades|num }}</td><td class="num">{{ p.ventas|cop }}</td><td class="num {{ 'pos' if p.ganancia >= 0 else 'neg' }}">{{ p.ganancia|cop }}</td></tr>
+      {% else %}<tr><td colspan="4" class="empty">Sin ventas en el periodo.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Gastos por categoría</h2><span class="badge">{{ t.gastos|cop }}</span></div>
+    {% for c, v in rep.gastos_cat %}
+      <div class="sum-line"><span>{{ c }}</span><b>{{ v|cop }}</b></div>
+    {% else %}<p class="hint">Sin gastos en el periodo.</p>{% endfor %}
+    <div class="sum-line" style="margin-top:8px;border-top:1px solid var(--line)"><span>Nómina (sin destajo)</span><b>{{ t.nomina|cop }}</b></div>
+    <div class="sum-line"><span>Depreciación de máquinas</span><b>{{ t.equipos|cop }}</b></div>
+  </div>
+</div>
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h2>Pares vendidos por talla</h2></div>
+  {% set mt = (rep.por_talla|map(attribute='pares')|max) if rep.por_talla else 1 %}
+  <div class="tallas">{% for t in rep.por_talla %}<div class="talla" style="min-width:58px"><small>T {{ t.talla }}</small><b>{{ t.pares|num }}</b><div class="bar" style="margin-top:4px"><span style="width:{{ (t.pares / mt * 100)|round(1) }}%"></span></div></div>{% else %}<p class="hint">Sin ventas en el periodo.</p>{% endfor %}</div>
+  <p class="hint" style="margin-top:10px">Úsalo para armar la corrida de la próxima producción con las tallas que más salen.</p>
+</div>
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h2>Clientes que más compraron</h2><a class="btn sec sm" href="{{ url_for('clientes') }}">Ver clientes</a></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Cliente</th><th class="num">Compras</th><th class="num">Pares</th><th class="num">Ventas</th></tr></thead>
+    <tbody>{% for cl in rep.por_cliente[:10] %}<tr><td>{{ loop.index }}</td><td>{{ cl.nombre }}</td><td class="num">{{ cl.compras|num }}</td><td class="num">{{ cl.unidades|num }}</td><td class="num">{{ cl.ventas|cop }}</td></tr>
+    {% else %}<tr><td colspan="5" class="empty">Sin ventas en el periodo.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+<p class="hint" style="margin-top:12px">El Excel trae: consolidado (con totales en fórmulas y gráfico), por referencia, por talla, por cliente, gastos, compras, ventas detalladas, nómina y cartera pendiente.</p>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js', v=STATIC_V) }}"></script>
+<script>
+  const S = {{ serie|tojson }};
+  new Chart(document.getElementById('ch'), {
+    type: 'bar',
+    data: { labels: S.labels, datasets: [
+      { label: 'Ventas', data: S.ventas, backgroundColor: '#b5602c', borderRadius: 4, order: 2 },
+      { label: 'Compras', data: S.compras, backgroundColor: '#e2d3c4', borderRadius: 4, order: 3 },
+      { label: 'Ganancia neta', data: S.neta, type: 'line', borderColor: '#138a5a', backgroundColor: '#138a5a', tension: .3, pointRadius: 3, order: 1 }
+    ]},
+    options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } },
+        tooltip: { callbacks: { label: c => c.dataset.label + ': ' + COP(c.parsed.y) } } },
+      scales: { y: { ticks: { callback: v => COP(v) }, grid: { color: '#f0ebe6' } }, x: { grid: { display: false } } } }
+  });
+</script>
+{% endblock %}

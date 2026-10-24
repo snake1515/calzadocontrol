@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Producción #{{ p.id }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Producción #{{ p.id }} · {{ p.producto.etiqueta }} {% if p.anulada %}<span class="badge err">Anulada</span>{% endif %}</h1>
+    <p>{{ p.fecha|fecha(True) }}{% if p.usuario %} · registró {{ p.usuario.nombre }}{% endif %}{% if p.nota %} · {{ p.nota }}{% endif %}</p></div>
+  <div class="actions"><a class="btn sec" href="{{ url_for('producciones') }}">← Volver</a>
+    {% if not p.anulada %}<a class="btn sec" href="{{ url_for('produccion_editar', id=p.id) }}">Editar fecha</a>{% endif %}
+    <a class="btn" href="{{ url_for('produccion_nueva', producto=p.producto_id) }}">Producir otra vez</a></div>
+</div>
+
+<div class="card">
+  <div class="flow">
+    <div class="box">
+      <small>Entró</small>
+      {% for c in p.consumos %}<div><b>{{ c.cantidad|num(3) }}</b> {{ c.insumo.unidad }} de {{ c.insumo.nombre }}</div>{% else %}<div>Inventario inicial (sin materiales)</div>{% endfor %}
+      {% if p.costo_mano_obra %}<div>+ mano de obra ({{ p.mano_obra|length }} proceso{{ 's' if p.mano_obra|length != 1 }})</div>{% endif %}
+      {% if p.costo_indirectos %}<div>+ costos indirectos</div>{% endif %}
+    </div>
+    <div class="arrow">→</div>
+    <div class="box"><small>Salió</small><div class="big-num">{{ p.cantidad|num }}</div><div>pares de {{ p.producto.etiqueta }}</div>
+      <div class="tallas" style="justify-content:center;margin-top:8px">{% for t in p.tallas %}<div class="talla"><small>{{ t.talla }}</small><b>{{ t.cantidad }}</b></div>{% endfor %}</div>
+      <div style="margin-top:8px"><span class="badge">{{ p.costo_unitario|cop }} por par</span></div></div>
+  </div>
+  {% if teorico is not none %}
+    {% set dif = p.cantidad - teorico %}
+    <div class="note {{ 'warn' if dif < -0.5 else '' }}" style="margin-top:14px">
+      Según la ficha actual, con esos materiales debían salir <b>{{ teorico|num(1) }}</b> pares (limita {{ limitante.nombre }}).
+      {% if dif < -0.5 %}Salieron <b>{{ (-dif)|num(1) }} menos</b>: desperdicio de {{ ((-dif) / teorico * 100)|num(1) }}%.
+      {% elif dif > 0.5 %}Salieron <b>{{ dif|num(1) }} más</b> de lo esperado: revisa si la ficha está sobredimensionada.
+      {% else %}El rendimiento fue el esperado. ✔{% endif %}
+    </div>
+  {% endif %}
+</div>
+
+<div class="grid g2" style="margin-top:16px">
+  <div>
+    <div class="card">
+      <div class="card-head"><h2>Materiales consumidos</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Material</th><th class="num">Cantidad</th><th class="num">Costo unit.</th><th class="num">Total</th></tr></thead>
+        <tbody>{% for c in p.consumos %}
+          <tr><td>{{ c.insumo.nombre }}</td><td class="num">{{ c.cantidad|num(3) }} {{ c.insumo.unidad }}</td><td class="num">{{ c.costo_unitario|cop }}</td><td class="num">{{ c.costo_total|cop }}</td></tr>
+        {% else %}<tr><td colspan="4" class="empty">Sin materiales.</td></tr>{% endfor %}</tbody>
+        <tfoot><tr><td colspan="3">Total materiales</td><td class="num">{{ p.costo_insumos|cop }}</td></tr></tfoot>
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Mano de obra</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Proceso</th><th>Quién</th><th>Detalle</th><th class="num">Total</th><th></th></tr></thead>
+        <tbody>{% for m in p.mano_obra %}
+          <tr><td>{{ m.proceso }}</td><td>{% if m.empleado %}{% if puede('admin') %}<a href="{{ url_for('empleado_detalle', id=m.empleado_id) }}">{{ m.quien }}</a>{% else %}{{ m.quien }}{% endif %}{% else %}{{ m.quien }}{% endif %}</td>
+            <td><small>{{ m.detalle }}</small></td><td class="num">{{ m.total|cop }}</td>
+            <td>{% if m.nomina_id %}<span class="badge ok">Pagado NM-{{ '%05d'|format(m.nomina_id) }}</span>{% elif m.empleado %}<span class="badge warn">Por pagar</span>{% endif %}</td></tr>
+        {% else %}<tr><td colspan="5" class="empty">Sin mano de obra registrada en este lote.</td></tr>{% endfor %}</tbody>
+        <tfoot><tr><td colspan="3">Total mano de obra</td><td class="num">{{ p.costo_mano_obra|cop }}</td><td></td></tr></tfoot>
+      </table></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Costo del lote</h2></div>
+    <div class="sum-line"><span>Materiales</span><b>{{ p.costo_insumos|cop }}</b></div>
+    <div class="sum-line"><span>Mano de obra</span><b>{{ p.costo_mano_obra|cop }}</b></div>
+    <div class="sum-line"><span>Energía eléctrica</span><b>{{ p.costo_energia|cop }}</b></div>
+    <div class="sum-line"><span>Agua / gas</span><b>{{ p.costo_gas_agua|cop }}</b></div>
+    <div class="sum-line"><span>Transporte / maquila</span><b>{{ p.costo_transporte|cop }}</b></div>
+    <div class="sum-line"><span>Otros{% if p.otros_descripcion %}<br><small>{{ p.otros_descripcion }}</small>{% endif %}</span><b>{{ p.costo_otros|cop }}</b></div>
+    <div class="sum-total"><span>Total</span><span>{{ p.costo_total|cop }}</span></div>
+    <div class="sum-line"><span>Costo por par</span><b>{{ p.costo_unitario|cop }}</b></div>
+    {% set pv = p.producto.precio_venta %}
+    <div class="sum-line"><span>Ganancia esperada por par (detal {{ pv|cop }})</span><b class="{{ 'pos' if pv >= p.costo_unitario else 'neg' }}">{{ (pv - p.costo_unitario)|cop }}</b></div>
+    {% if puede('admin') and not p.anulada %}
+    <form method="post" action="{{ url_for('produccion_anular', id=p.id) }}" style="margin-top:14px" onsubmit="return confirm('¿Anular esta producción? Se quitarán {{ p.cantidad }} pares del inventario y los materiales volverán a la bodega.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm">Anular producción</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

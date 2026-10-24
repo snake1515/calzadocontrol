@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if g else 'Registrar' }} gasto{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ 'Editar gasto' if g else 'Registrar gasto' }}</h1><p>Ej: recibo de energía, agua, arriendo del taller, flete a Bogotá, honorarios del contador.</p></div></div>
+<div class="card" style="max-width:620px">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+      <div class="field"><label>Fecha</label><input class="input" type="date" name="fecha" value="{{ request.form.fecha or (g.fecha.isoformat() if g else hoy) }}" required></div>
+      <div class="field"><label>Categoría</label><select class="input" name="categoria" id="cat">
+        {% set sel = request.form.categoria or (g.categoria if g else (pre_cat or 'Energía eléctrica')) %}
+        {% for c in categorias %}<option {{ 'selected' if c == sel }}>{{ c }}</option>{% endfor %}
+      </select></div>
+      <div class="field"><label>Valor ($)</label><input class="input" type="number" step="any" min="0" name="valor" value="{{ request.form.valor or ('%g'|format(g.valor) if g else '') }}" required></div>
+    </div>
+    <div class="field"><label>Descripción <span id="req" class="muted" style="font-weight:400">(opcional)</span></label><input class="input" name="descripcion" id="desc" value="{{ request.form.descripcion or (g.descripcion or '' if g else '') }}" placeholder="Ej: Recibo de energía de octubre"></div>
+    <div class="note" style="margin-bottom:14px">Los materiales se registran en <b>Compras</b>, las máquinas en <b>Máquinas</b> y los sueldos en <b>Nómina</b>. Aquí van arriendo, energía, agua, gas, internet, fletes, contador y demás.</div>
+    <div class="actions"><button class="btn">Guardar</button><a class="btn sec" href="{{ url_for('gastos') }}">Cancelar</a></div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  const cat = document.getElementById('cat'), desc = document.getElementById('desc'), req = document.getElementById('req');
+  function u() { const o = cat.value === 'Otros'; desc.required = o; req.textContent = o ? '(obligatoria para «Otros»)' : '(opcional)'; }
+  cat.addEventListener('change', u); u();
+</script>
+{% endblock %}
