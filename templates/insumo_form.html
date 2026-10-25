@@ -16,7 +16,7 @@
               {% set sel = request.form.unidad or (ins.unidad if ins else 'unidad') %}
               {% for u in unidades %}<option {{ 'selected' if u == sel }}>{{ u }}</option>{% endfor %}
             </select>
-            <div class="hint">Así lo vas a medir en la ficha (ej: pie cuadrado, par, galón, metro).</div>
+            <div class="hint">Así lo vas a medir en la ficha (ej: metro cuadrado para el cuero, metro para sintéticos y forros, par, galón).</div>
           </div>
         </div>
         <div class="form-row">

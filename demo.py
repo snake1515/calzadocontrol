@@ -40,10 +40,10 @@ def cargar(empresa, admin):
 
     # nombre, categoría, unidad, mínimo, cantidad comprada, costo total, proveedor
     datos = [
-        ("Cuero napa negro", "Cueros y sintéticos", "pie cuadrado", 80, 1500, 11250000, "Curtiembre del Norte"),
-        ("Cuero napa café", "Cueros y sintéticos", "pie cuadrado", 60, 900, 6750000, "Curtiembre del Norte"),
+        ("Cuero napa negro", "Cueros y sintéticos", "metro cuadrado", 8, 140, 11200000, "Curtiembre del Norte"),
+        ("Cuero napa café", "Cueros y sintéticos", "metro cuadrado", 6, 84, 6720000, "Curtiembre del Norte"),
         ("Sintético charol negro", "Cueros y sintéticos", "metro", 15, 160, 2880000, "Sintéticos La 8"),
-        ("Forro badana", "Forros", "pie cuadrado", 80, 2200, 6600000, "Curtiembre del Norte"),
+        ("Forro badana", "Forros", "metro cuadrado", 8, 205, 6560000, "Curtiembre del Norte"),
         ("Forro textil lona", "Forros", "metro", 10, 90, 810000, "Sintéticos La 8"),
         ("Suela TR dama", "Suelas y tacones", "par", 60, 700, 4550000, "Suelas Pamplonita"),
         ("Suela caucho caballero", "Suelas y tacones", "par", 40, 380, 3420000, "Suelas Pamplonita"),
@@ -73,12 +73,12 @@ def cargar(empresa, admin):
                        stock_minimo=60, es_preparacion=True, tanda_rinde=60)
     db.session.add(plantilla)
     db.session.flush()
-    for comp, c in (("Cartón celulosa (lámina)", 6), ("Espuma 3 mm (lámina)", 5), ("Forro badana", 36)):
+    for comp, c in (("Cartón celulosa (lámina)", 6), ("Espuma 3 mm (lámina)", 5), ("Forro badana", 3.4)):
         plantilla.receta_prep.append(PrepRecetaItem(componente=ins[comp], cantidad=c / 60,
                                                     unidad=ins[comp].unidad))
     db.session.commit()
     registrar_preparacion(plantilla, 1440, {ins["Cartón celulosa (lámina)"]: 144, ins["Espuma 3 mm (lámina)"]: 120,
-                                           ins["Forro badana"]: 864}, mano_obra=720000,
+                                           ins["Forro badana"]: 82}, mano_obra=720000,
                           fecha=inicio + timedelta(hours=3), usuario_id=marta.id)
     ins["Plantilla armada"] = plantilla
     db.session.commit()
@@ -87,17 +87,17 @@ def cargar(empresa, admin):
     # codigo, nombre, color, línea, material, tallas, detal, mayor, ficha por par, tarifas por proceso
     refs = [
         ("REF-101", "Baleta clásica", "Negro", "Dama", "Cuero napa", (35, 40), 95000, 68000,
-         {"Cuero napa negro": 1.6, "Forro badana": 1.4, "Suela TR dama": 1, "Plantilla armada": 1,
+         {"Cuero napa negro": 0.15, "Forro badana": 0.13, "Suela TR dama": 1, "Plantilla armada": 1,
           "Contrafuerte termoplástico": 1, "Puntera termoplástica": 1, "Pegante PU": 25 / 3785.41,
           "Halogenante (primer)": 5 / 3785.41, "Hilo nylon": 10, "Cajas de cartón": 1, "Papel seda": 2},
          [1800, 2500, 2200, 1500, 1000]),
         ("REF-101", "Baleta clásica", "Café", "Dama", "Cuero napa", (35, 40), 95000, 68000,
-         {"Cuero napa café": 1.6, "Forro badana": 1.4, "Suela TR dama": 1, "Plantilla armada": 1,
+         {"Cuero napa café": 0.15, "Forro badana": 0.13, "Suela TR dama": 1, "Plantilla armada": 1,
           "Contrafuerte termoplástico": 1, "Puntera termoplástica": 1, "Pegante PU": 25 / 3785.41,
           "Halogenante (primer)": 5 / 3785.41, "Hilo nylon": 10, "Cajas de cartón": 1, "Papel seda": 2},
          [1800, 2500, 2200, 1500, 1000]),
         ("REF-205", "Botín casual", "Negro", "Caballero", "Cuero napa", (38, 43), 165000, 115000,
-         {"Cuero napa negro": 2.8, "Forro badana": 2.4, "Suela caucho caballero": 1, "Plantilla armada": 1,
+         {"Cuero napa negro": 0.26, "Forro badana": 0.22, "Suela caucho caballero": 1, "Plantilla armada": 1,
           "Contrafuerte termoplástico": 1, "Puntera termoplástica": 1, "Pegante PU": 35 / 3785.41,
           "Pegante bóxer": 10 / 3785.41, "Halogenante (primer)": 6 / 3785.41, "Hilo nylon": 18,
           "Cordones": 1, "Ojaletes": 12, "Cajas de cartón": 1, "Papel seda": 2},
@@ -109,7 +109,7 @@ def cargar(empresa, admin):
           "Cajas de cartón": 1, "Papel seda": 1},
          [1200, 2000, 1800, 1200, 800]),
         ("REF-415", "Sandalia tiras", "Café", "Dama", "Cuero napa", (35, 40), 79000, 55000,
-         {"Cuero napa café": 1.0, "Forro badana": 0.8, "Suela TR dama": 1, "Plantilla armada": 1,
+         {"Cuero napa café": 0.093, "Forro badana": 0.075, "Suela TR dama": 1, "Plantilla armada": 1,
           "Pegante PU": 20 / 3785.41, "Halogenante (primer)": 4 / 3785.41, "Hilo nylon": 6, "Hebillas": 2,
           "Cajas de cartón": 1, "Papel seda": 1},
          [1200, 1800, 1500, 0, 800]),
@@ -121,7 +121,7 @@ def cargar(empresa, admin):
         db.session.add(p)
         for n_ins, c in ficha.items():
             p.receta.append(RecetaItem(insumo=ins[n_ins], cantidad=c,
-                                       unidad="mililitro" if ins[n_ins].unidad == "galón" else ins[n_ins].unidad))
+                                       unidad={"galón": "mililitro", "metro cuadrado": "decímetro cuadrado"}.get(ins[n_ins].unidad, ins[n_ins].unidad)))
         for proc, v in zip(T, tarifas):
             if v:
                 p.procesos.append(ProcesoTarifa(proceso=proc, valor_par=v))
@@ -208,7 +208,7 @@ def cargar(empresa, admin):
                 registrar_compra(ins[nombre], cant * .6, costo * .6 * random.uniform(1, 1.04), prov, "Reposición",
                                  dia.replace(hour=7), admin.id)
             registrar_preparacion(plantilla, 720, {ins["Cartón celulosa (lámina)"]: 72, ins["Espuma 3 mm (lámina)"]: 60,
-                                                   ins["Forro badana"]: 432}, mano_obra=360000,
+                                                   ins["Forro badana"]: 41}, mano_obra=360000,
                                   fecha=dia.replace(hour=7, minute=30), usuario_id=marta.id)
             db.session.commit()
         # Producción: casi todos los días hábiles un lote de 1–3 docenas

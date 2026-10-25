@@ -6,7 +6,7 @@ App web **multiempresa** para **fábricas y talleres de calzado**: materiales, p
 
 | Módulo | Qué resuelve |
 |---|---|
-| **Materiales** | Cueros (pie²/dm²), sintéticos y forros (metro), suelas y refuerzos (par/docena), pegantes (galón/ml), hilos, herrajes y empaques, con categoría, costo promedio ponderado y alerta de mínimo |
+| **Materiales** | Cueros (m²; en la ficha se puede escribir en dm²), sintéticos y forros (metro), suelas y refuerzos (par/docena), pegantes (galón/ml), hilos, herrajes y empaques, con categoría, costo promedio ponderado y alerta de mínimo |
 | **Compras** | Entrada de materiales (varios en una compra) y de máquinas/herramientas |
 | **Semielaborados** | Plantillas armadas, contrafuertes, cortes por tarea: se elaboran con materiales y quedan con su costo real |
 | **Referencias** | Modelo + color, línea (dama, caballero, escolar…), rango de tallas, precio detal y por mayor, **ficha de consumo** por par y **tarifas de destajo por proceso**. Stock **por talla**. Botón para crear otro color con la misma ficha |

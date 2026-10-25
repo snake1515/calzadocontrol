@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Registrar compra{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Registrar compra</h1><p>Escribe la cantidad y lo que pagaste en total por cada material (cuero por pie², suelas por par, pegante por galón…). El costo promedio se recalcula solo.</p></div></div>
+<div class="page-head"><div><h1>Registrar compra</h1><p>Escribe la cantidad y lo que pagaste en total por cada material (cuero por m², suelas por par, pegante por galón…). El costo promedio se recalcula solo.</p></div></div>
 {% if puede('admin') %}
 <div class="seg-tabs" style="margin-bottom:16px"><a class="on">Materiales</a><a href="{{ url_for('activo_form', origen='compras') }}">Máquina o herramienta</a></div>
 {% endif %}

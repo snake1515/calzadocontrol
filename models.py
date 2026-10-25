@@ -78,7 +78,7 @@ ROLES = {
 }
 
 UNIDADES = [
-    "unidad", "par", "docena", "pie cuadrado", "decímetro cuadrado", "metro cuadrado",
+    "unidad", "par", "docena", "metro cuadrado", "decímetro cuadrado", "pie cuadrado",
     "metro", "centímetro", "yarda", "kilogramo", "gramo", "libra", "litro", "mililitro",
     "galón", "rollo", "lámina", "cono", "paquete", "caja", "bolsa",
 ]

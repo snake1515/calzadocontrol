@@ -323,7 +323,7 @@ def receta_json(items, rinde=1.0, attr="insumo"):
 
 @app.template_filter("cant_receta")
 def filtro_cant_receta(r, attr="insumo", rinde=1.0):
-    """Muestra la cantidad de una línea de receta en su unidad escrita (ej. '1,8 pie²')."""
+    """Muestra la cantidad de una línea de receta en su unidad escrita (ej. '15 dm²')."""
     ins = getattr(r, attr)
     u = unidad_valida(r.unidad, ins.unidad)
     return f"{filtro_num(convertir(r.cantidad * (rinde or 1), ins.unidad, u), 4)} {ABREV.get(u, u)}"
