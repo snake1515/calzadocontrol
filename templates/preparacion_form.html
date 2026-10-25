@@ -64,7 +64,7 @@ const $ = id => document.getElementById(id);
 if ($('rows')) {
   const rows = $('rows'), ins = id => INS.find(i => i.id == id), prep = () => PREPS.find(p => p.id == $('prep').value);
   let editado = false;
-  const opts = sel => '<option value="">— Elegir —</option>' + INS.map(i => `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre}</option>`).join('');
+  const opts = sel => '<option value="">— Elegir —</option>' + INS.map(i => `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${esc(i.nombre)}</option>`).join('');
   function addRow(sel = '', cant = '', uni = '') {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td style="min-width:170px"><select class="input iSel" name="consumo_insumo[]">${opts(sel)}</select></td>
@@ -93,7 +93,7 @@ if ($('rows')) {
       tr.querySelector('.co').textContent = i ? COP(q * i.costo) : '—';
       if (i) { cIns += q * i.costo; uso[i.id] = (uso[i.id] || 0) + q; }
     });
-    for (const id in uso) { const i = ins(id); if (uso[id] > i.stock + 1e-9) av.push(`${i.nombre}: necesitas ${NUM(uso[id], 3)} y hay ${NUM(i.stock, 3)} ${i.unidad}`); }
+    for (const id in uso) { const i = ins(id); if (uso[id] > i.stock + 1e-9) av.push(`${esc(i.nombre)}: necesitas ${NUM(uso[id], 3)} y hay ${NUM(i.stock, 3)} ${esc(i.unidad)}`); }
     const otr = val($('mo')) + val($('ot')), tot = cIns + otr, q = val($('cant')), p = prep();
     $('sIns').textContent = COP(cIns); $('sOtr').textContent = COP(otr); $('sTot').textContent = COP(tot);
     $('sUnit').textContent = q > 0 ? COP(tot / q) : '—';

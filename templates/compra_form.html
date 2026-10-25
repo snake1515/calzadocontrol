@@ -39,7 +39,7 @@ const INS = {{ insumos|tojson }};
 const rows = document.getElementById('rows');
 function opts(sel) {
   return '<option value="">— Elegir —</option>' + INS.map(i =>
-    `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre} (${i.unidad})</option>`).join('');
+    `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('');
 }
 function addRow(sel = '', cant = '', costo = '') {
   const tr = document.createElement('tr');

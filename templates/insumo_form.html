@@ -73,7 +73,7 @@ const REC = {{ receta_prep|tojson }};
 const $ = id => document.getElementById(id);
 const rows = $('rows');
 const byId = id => INS.find(i => i.id == id);
-function opts(sel) { return '<option value="">— Elegir —</option>' + INS.map(i => `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre}</option>`).join(''); }
+function opts(sel) { return '<option value="">— Elegir —</option>' + INS.map(i => `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${esc(i.nombre)}</option>`).join(''); }
 function addRow(sel = '', cant = '', uni = '') {
   const tr = document.createElement('tr');
   tr.innerHTML = `<td style="min-width:180px"><select class="input iSel" name="prep_insumo[]">${opts(sel)}</select></td>

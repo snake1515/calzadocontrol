@@ -163,6 +163,8 @@ class Usuario(UserMixin, db.Model):
     rol = db.Column(db.String(20), nullable=False, default="vendedor")
     activo = db.Column(db.Boolean, nullable=False, default=True)
     creado = db.Column(db.DateTime, default=ahora)
+    intentos_fallidos = db.Column(db.Integer, nullable=False, default=0)
+    bloqueado_hasta = db.Column(db.DateTime)  # tras 5 claves erradas seguidas, 15 minutos
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

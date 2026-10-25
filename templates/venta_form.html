@@ -104,7 +104,7 @@ if (rows) {
     const q = $('buscar').value.trim().toLowerCase(), l = $('lineaF').value, c = enCarrito();
     $('refs').innerHTML = PRODS.filter(p => (!l || p.linea === l) && (!q || p.nombre.toLowerCase().includes(q))).map(p => {
       const tot = Object.keys(p.tallas).reduce((s, t) => s + (c[p.id + ':' + t] || 0), 0);
-      return `<div class="ref ${tot ? 'sel' : ''}"><b>${p.nombre}</b><div class="meta">${p.linea} · ${COP(precioDe(p))} · ${p.stock} pares</div>
+      return `<div class="ref ${tot ? 'sel' : ''}"><b>${esc(p.nombre)}</b><div class="meta">${esc(p.linea)} · ${COP(precioDe(p))} · ${p.stock} pares</div>
         <div class="tallas">${Object.entries(p.tallas).map(([t, s]) => { const u = c[p.id + ':' + t] || 0;
           return `<button type="button" class="talla" data-id="${p.id}" data-t="${t}" ${s - u <= 0 ? 'disabled' : ''} title="Talla ${t}: ${s} disponibles"><small>${t}</small><b>${s - u}</b>${u ? `<em>+${u}</em>` : ''}</button>`; }).join('')}</div></div>`;
     }).join('') || '<p class="empty">Sin referencias con ese filtro.</p>';
@@ -115,7 +115,7 @@ if (rows) {
     if (tr) { const i = tr.querySelector('.q'); i.value = val(i) + q; return calc(); }
     const p = prod(id);
     tr = document.createElement('tr'); tr.dataset.id = id; tr.dataset.t = t;
-    tr.innerHTML = `<td><b>${p.nombre}</b><input type="hidden" name="producto_id[]" value="${id}"></td>
+    tr.innerHTML = `<td><b>${esc(p.nombre)}</b><input type="hidden" name="producto_id[]" value="${id}"></td>
       <td><select class="input tS" name="talla[]" style="width:76px">${Object.keys(p.tallas).map(x => `<option ${x == t ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
       <td><input class="input r q" type="number" min="1" step="1" name="cantidad[]" value="${q}" style="width:76px"></td>
       <td><input class="input r pr" type="number" min="0" step="any" name="precio[]" value="${precioDe(p)}" style="width:110px"></td>
@@ -133,7 +133,7 @@ if (rows) {
       tr.querySelector('.st').textContent = COP(q * pr); s += q * pr; u += q;
     });
     for (const k in c) { const [id, t] = k.split(':'), p = prod(id), hay = p.tallas[t] || 0;
-      if (c[k] > hay) w.push(`${p.nombre} talla ${t}: solo hay ${hay}`); }
+      if (c[k] > hay) w.push(`${esc(p.nombre)} talla ${t}: solo hay ${hay}`); }
     const d = Math.min(val($('desc')), s), base = s - d, iva = Math.round(base * val($('iva')) / 100), tot = base + iva;
     $('sub').textContent = COP(s); $('ivaV').textContent = COP(iva); $('ivaLine').style.display = iva ? '' : 'none';
     $('tot').textContent = COP(tot);
@@ -147,7 +147,7 @@ if (rows) {
       $('venceTxt').innerHTML = `Vence el <b>${f.toLocaleDateString('es-CO')}</b> · queda debiendo <b>${COP(Math.max(tot - ab, 0))}</b>`;
       if (!$('cli').value.trim()) w.push('Para vender a crédito escribe o elige el cliente.');
       if (ab > tot + .5) w.push('El abono inicial supera el total.');
-      if (cliente && cliente.cupo && cliente.saldo + tot - ab > cliente.cupo) w.push(`Con esta venta ${cliente.nombre} supera su cupo de ${COP(cliente.cupo)}.`);
+      if (cliente && cliente.cupo && cliente.saldo + tot - ab > cliente.cupo) w.push(`Con esta venta ${esc(cliente.nombre)} supera su cupo de ${COP(cliente.cupo)}.`);
     }
     $('vacio').style.display = rows.children.length ? 'none' : '';
     const wEl = $('warn'); wEl.style.display = w.length ? '' : 'none'; wEl.innerHTML = w.join('<br>');
@@ -167,14 +167,14 @@ if (rows) {
     else if (cliente && $('cliDoc').dataset.auto) $('cliDoc').value = '';
     $('cliDoc').dataset.auto = (cliente && cliente.doc) ? '1' : '';
     if (cliente) {
-      $('cliInfo').innerHTML = `<span class="badge">${cliente.tipo || 'Cliente'}</span> ${cliente.estado}` + (cliente.dias != null ? ' · última compra ' + (cliente.dias === 0 ? 'hoy' : cliente.dias === 1 ? 'ayer' : `hace ${cliente.dias} días`) : '')
+      $('cliInfo').innerHTML = `<span class="badge">${esc(cliente.tipo || 'Cliente')}</span> ${esc(cliente.estado)}` + (cliente.dias != null ? ' · última compra ' + (cliente.dias === 0 ? 'hoy' : cliente.dias === 1 ? 'ayer' : `hace ${cliente.dias} días`) : '')
         + (cliente.plazo ? ` · crédito a ${cliente.plazo} días` : '');
       if (cliente.plazo) $('plazo').value = cliente.plazo;
       const r = document.querySelector(`input[name="lista"][value="${cliente.mayor ? 'mayor' : 'detal'}"]`); r.checked = true; cambiarLista();
     } else $('cliInfo').innerHTML = nom ? '<small class="muted">Cliente nuevo</small>' : '';
     if (cliente && cliente.saldo > .5) {
       $('deuda').style.display = '';
-      $('deuda').innerHTML = `⏳ <b>${cliente.nombre}</b> debe <b>${COP(cliente.saldo)}</b>` + (cliente.vencido > .5 ? `, de los cuales <b>${COP(cliente.vencido)} están vencidos</b>.` : ' (al día).') + (cliente.cupo ? ` Cupo: ${COP(cliente.cupo)}.` : '');
+      $('deuda').innerHTML = `⏳ <b>${esc(cliente.nombre)}</b> debe <b>${COP(cliente.saldo)}</b>` + (cliente.vencido > .5 ? `, de los cuales <b>${COP(cliente.vencido)} están vencidos</b>.` : ' (al día).') + (cliente.cupo ? ` Cupo: ${COP(cliente.cupo)}.` : '');
     } else $('deuda').style.display = 'none';
     calc();
   }

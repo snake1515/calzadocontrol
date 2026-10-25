@@ -57,7 +57,6 @@ Si ya existía una instalación de una sola empresa, al arrancar se convierte so
 
 Por consola (opcional): `python demo.py "Nombre"` crea una empresa demo con datos de ejemplo.
 
-lave `demo123`.
 
 ## Estructura
 

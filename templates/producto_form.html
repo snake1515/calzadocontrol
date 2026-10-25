@@ -101,8 +101,8 @@ const byId = id => INS.find(i => i.id == id);
 function opts(sel) {
   let h = '<option value="">— Elegir —</option>', g = null;
   INS.forEach(i => { const gr = i.prep ? 'Semielaborados' : i.cat;
-    if (gr !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${gr}">`; g = gr; }
-    h += `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre}</option>`; });
+    if (gr !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${esc(gr)}">`; g = gr; }
+    h += `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${esc(i.nombre)}</option>`; });
   return h + '</optgroup>';
 }
 function addRow(sel = '', cant = '', uni = '') {
@@ -120,7 +120,7 @@ function addRow(sel = '', cant = '', uni = '') {
 }
 function addProc(nombre = '', valor = '') {
   const tr = document.createElement('tr');
-  tr.innerHTML = `<td style="min-width:200px"><input class="input pN" name="proc_nombre[]" list="procList" value="${nombre}" placeholder="Ej: Guarnición (aparado)"></td>
+  tr.innerHTML = `<td style="min-width:200px"><input class="input pN" name="proc_nombre[]" list="procList" value="${esc(nombre)}" placeholder="Ej: Guarnición (aparado)"></td>
     <td><input class="input r pV" type="number" step="any" min="0" name="proc_valor[]" value="${valor}" style="min-width:100px"></td>
     <td class="num pD">—</td><td><button type="button" class="btn-icon" title="Quitar">✕</button></td>`;
   tr.querySelector('.btn-icon').onclick = () => { tr.remove(); calc(); };
@@ -133,7 +133,7 @@ function calc() {
     const ins = byId(tr.querySelector('.iSel').value), q = val(tr.querySelector('input')), u = tr.querySelector('.uSel').value;
     const base = ins ? conv(q, u, ins.unidad) : 0, c = ins ? base * ins.costo : 0; t += c;
     tr.querySelector('.co').textContent = ins ? COP(c) : '—';
-    if (ins && q) uno.push(NUM(q / r, 4) + ' ' + (ABR[u] || u) + ' de ' + ins.nombre);
+    if (ins && q) uno.push(NUM(q / r, 4) + ' ' + (ABR[u] || u) + ' de ' + esc(ins.nombre));
   });
   let mo = 0;
   procRows.querySelectorAll('tr').forEach(tr => { const v = val(tr.querySelector('.pV')); mo += v; tr.querySelector('.pD').textContent = v ? COP(v * 12) : '—'; });

@@ -120,8 +120,8 @@ if ($('rows')) {
   function opts(sel) {
     let h = '<option value="">— Elegir —</option>', g = null;
     INS.forEach(i => { const gr = i.prep ? 'Semielaborados' : i.cat;
-      if (gr !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${gr}">`; g = gr; }
-      h += `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${i.nombre}</option>`; });
+      if (gr !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${esc(gr)}">`; g = gr; }
+      h += `<option value="${i.id}" ${i.id == sel ? 'selected' : ''}>${esc(i.nombre)}</option>`; });
     return h + '</optgroup>';
   }
   function addRow(sel = '', cant = '', uni = '') {
@@ -138,13 +138,13 @@ if ($('rows')) {
     rows.appendChild(tr);
   }
   function empOpts(sel) {
-    return '<option value="">Externo / otro</option>' + EMPS.map(e => `<option value="${e.id}" ${e.id == sel ? 'selected' : ''}>${e.nombre}${e.tipo === 'fijo' ? ' (sueldo fijo)' : ''}</option>`).join('');
+    return '<option value="">Externo / otro</option>' + EMPS.map(e => `<option value="${e.id}" ${e.id == sel ? 'selected' : ''}>${esc(e.nombre)}${e.tipo === 'fijo' ? ' (sueldo fijo)' : ''}</option>`).join('');
   }
   function addMo(m = {}) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td style="min-width:120px"><input class="input mP" name="mo_proceso[]" list="procList" value="${m.proceso || ''}" placeholder="Proceso"></td>
+    tr.innerHTML = `<td style="min-width:120px"><input class="input mP" name="mo_proceso[]" list="procList" value="${esc(m.proceso || '')}" placeholder="Proceso"></td>
       <td style="min-width:130px"><select class="input mE" name="mo_empleado[]">${empOpts(m.empleado)}</select>
-        <input class="input mR" name="mo_responsable[]" value="${m.responsable || ''}" placeholder="Nombre (taller externo…)" style="margin-top:4px"></td>
+        <input class="input mR" name="mo_responsable[]" value="${esc(m.responsable || '')}" placeholder="Nombre (taller externo…)" style="margin-top:4px"></td>
       <td><select class="input mM" name="mo_modo[]" style="min-width:96px">${Object.entries(MODOS).map(([k, v]) => `<option value="${k}" ${k === (m.modo || 'par') ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
       <td><input class="input r mV" type="number" step="any" min="0" name="mo_valor[]" value="${m.valor || ''}" style="min-width:76px"></td>
       <td><input class="input r mN" type="number" step="1" min="0" name="mo_pares[]" value="${m.pares || ''}" placeholder="todos" style="width:64px"></td>
@@ -191,7 +191,7 @@ if ($('rows')) {
       tr.querySelector('.co').textContent = i ? COP(q * i.costo) : '—';
       if (i) { cIns += q * i.costo; uso[i.id] = (uso[i.id] || 0) + q; }
     });
-    for (const id in uso) { const i = ins(id); if (uso[id] > i.stock + 1e-9) avisos.push(`${i.nombre}: necesitas ${NUM(uso[id], 3)} y hay ${NUM(i.stock, 3)} ${i.unidad}`); }
+    for (const id in uso) { const i = ins(id); if (uso[id] > i.stock + 1e-9) avisos.push(`${esc(i.nombre)}: necesitas ${NUM(uso[id], 3)} y hay ${NUM(i.stock, 3)} ${esc(i.unidad)}`); }
     const q = pares();
     let cMo = 0;
     moRows.querySelectorAll('tr').forEach(tr => {

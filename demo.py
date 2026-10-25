@@ -31,7 +31,8 @@ def cargar(empresa, admin):
         u = Usuario.query.filter_by(username=user).first()
         if not u:
             u = Usuario(nombre=nombre, username=user, rol=rol, empresa_id=empresa.id)
-            u.set_password("demo123")
+            import secrets
+            u.set_password(secrets.token_urlsafe(12))  # clave aleatoria: SoftGest la asigna si hace falta
             db.session.add(u)
         usuarios.append(u)
     db.session.commit()

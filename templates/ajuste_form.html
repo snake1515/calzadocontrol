@@ -41,8 +41,8 @@ const esConteo = () => $('motivo').value === {{ motivos[0]|tojson }};
 function opts(sel) {
   let h = '<option value="">— Elegir —</option>', g = null;
   ITEMS.forEach(i => {
-    if (i.grupo !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${i.grupo}">`; g = i.grupo; }
-    h += `<option value="${i.ref}" ${i.ref === sel ? 'selected' : ''}>${i.nombre}</option>`;
+    if (i.grupo !== g) { if (g) h += '</optgroup>'; h += `<optgroup label="${esc(i.grupo)}">`; g = i.grupo; }
+    h += `<option value="${i.ref}" ${i.ref === sel ? 'selected' : ''}>${esc(i.nombre)}</option>`;
   });
   return h + '</optgroup>';
 }
@@ -79,8 +79,8 @@ function calc() {
     if (!txt) { sa.textContent = co.textContent = '—'; return; }
     const q = conv(val(inp), u, i.unidad);
     let sale = conteo ? i.stock - q : q;
-    if (sale < -1e-9) w.push(conteo ? `${i.nombre}: se contó más de lo que dice el sistema. Eso se registra como compra.` : '');
-    else if (sale > i.stock + 1e-9) w.push(`${i.nombre}: solo hay ${NUM(conv(i.stock, i.unidad, u), 3)} ${ab}.`);
+    if (sale < -1e-9) w.push(conteo ? `${esc(i.nombre)}: se contó más de lo que dice el sistema. Eso se registra como compra.` : '');
+    else if (sale > i.stock + 1e-9) w.push(`${esc(i.nombre)}: solo hay ${NUM(conv(i.stock, i.unidad, u), 3)} ${ab}.`);
     sale = Math.max(sale, 0);
     sa.innerHTML = `<b>${NUM(conv(sale, i.unidad, u), 3)} ${ab}</b>`;
     co.textContent = COP(sale * i.costo);

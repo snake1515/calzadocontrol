@@ -101,6 +101,8 @@
 </div>
 <script>
   // Formato de pesos colombianos para los cálculos en pantalla
+  // Escapa texto escrito por usuarios antes de meterlo en HTML (evita inyección de código)
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const COP = v => (v < -0.5 ? '-$ ' : '$ ') + Math.round(Math.abs(v || 0)).toLocaleString('es-CO');
   const NUM = (v, d = 2) => (v || 0).toLocaleString('es-CO', { maximumFractionDigits: d });
   const val = el => { const x = parseFloat(String(el && el.value || '').replace(',', '.')); return isNaN(x) ? 0 : x; };

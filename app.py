@@ -46,6 +46,16 @@ app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True, "pool_recycle": 280}
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["REMEMBER_COOKIE_HTTPONLY"] = True
+app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
+app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=30)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+if os.getenv("RENDER"):  # en Render todo va por HTTPS: las cookies solo viajan cifradas
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["REMEMBER_COOKIE_SECURE"] = True
+app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024  # nada de archivos gigantes
+if not os.getenv("SECRET_KEY"):
+    print("AVISO: falta la variable SECRET_KEY; las sesiones se cerrarán en cada reinicio.", flush=True)
 NOMBRE_NEGOCIO = os.getenv("NOMBRE_NEGOCIO", "CalzadoControl")
 # WhatsApp de SoftGest para que los clientes activen su plan (solo números, con 57)
 SOFTGEST_WA = "".join(ch for ch in os.getenv("SOFTGEST_WHATSAPP", "") if ch.isdigit())
@@ -164,9 +174,24 @@ def csrf_token():
 @app.before_request
 def verificar_csrf():
     if request.method == "POST":
-        if request.form.get("csrf_token") != session.get("_csrf"):
+        enviado, esperado = request.form.get("csrf_token") or "", session.get("_csrf") or ""
+        if not enviado or not esperado or not secrets.compare_digest(enviado, esperado):
             flash("La sesión expiró. Intenta de nuevo.", "error")
-            return redirect(request.url)
+            return redirect(request.path)
+
+
+@app.after_request
+def cabeceras_seguridad(resp):
+    """Cabeceras que impiden incrustar la app en otras páginas y otros abusos del navegador."""
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if app.config.get("SESSION_COOKIE_SECURE"):
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    if current_user.is_authenticated and resp.mimetype == "text/html":
+        resp.headers.setdefault("Cache-Control", "no-store")
+    return resp
 
 
 # Rutas que se pueden usar sin empresa activa o con la empresa bloqueada
@@ -361,9 +386,28 @@ def login():
         u = Usuario.query.filter(
             func.lower(Usuario.username) == request.form.get("username", "").strip().lower()
         ).first()
+        momento = ahora()
+        if u and u.bloqueado_hasta and u.bloqueado_hasta > momento:
+            minutos = max(int((u.bloqueado_hasta - momento).total_seconds() // 60) + 1, 1)
+            flash(f"Demasiados intentos fallidos. Intenta de nuevo en {minutos} minuto(s).", "error")
+            return render_template("login.html")
         if u and u.activo and u.check_password(request.form.get("password", "")):
+            u.intentos_fallidos, u.bloqueado_hasta = 0, None
+            db.session.commit()
+            session.clear()  # sesión nueva al entrar (evita fijación de sesión)
             login_user(u, remember=bool(request.form.get("recordar")))
-            return redirect(request.args.get("next") or url_for("inicio"))
+            destino = request.args.get("next") or ""
+            if not destino.startswith("/") or destino.startswith("//") or "\\" in destino:
+                destino = url_for("inicio")  # solo se redirige dentro de la propia app
+            return redirect(destino)
+        if u:
+            u.intentos_fallidos = (u.intentos_fallidos or 0) + 1
+            if u.intentos_fallidos >= 5:
+                u.bloqueado_hasta = momento + timedelta(minutes=15)
+                u.intentos_fallidos = 0
+            db.session.commit()
+        import time
+        time.sleep(0.6)  # frena los ataques de adivinar claves
         flash("Usuario o contraseña incorrectos.", "error")
     return render_template("login.html")
 
@@ -1000,7 +1044,7 @@ def insumo_form(id=None):
     if request.method == "POST":
         f = request.form
         nombre = f.get("nombre", "").strip()
-        unidad = f.get("unidad", "unidad")
+        unidad = f.get("unidad") if f.get("unidad") in UNIDADES else "unidad"
         categoria = f.get("categoria") if f.get("categoria") in CATEGORIAS_INSUMO else "Otros"
         minimo = n(f.get("stock_minimo"))
         es_prep = bool(f.get("es_preparacion"))
@@ -1711,7 +1755,10 @@ def _procesar_logo(data):
     """Convierte la imagen subida en un JPG cuadrado de hasta 600 px con fondo blanco."""
     from PIL import Image
     import io
+    Image.MAX_IMAGE_PIXELS = 40_000_000  # rechaza imágenes gigantes hechas para tumbar el servidor
     im = Image.open(io.BytesIO(data))
+    if im.format not in ("JPEG", "PNG", "WEBP"):
+        raise ValueError("formato no permitido")
     im.load()
     if im.mode in ("RGBA", "LA", "P"):
         im = im.convert("RGBA")
@@ -2298,7 +2345,9 @@ def migrar_columnas():
     from sqlalchemy import inspect, text
     insp = inspect(db.engine)
     tablas = set(insp.get_table_names())
-    nuevas = [("cz_usuarios", "empresa_id", "INTEGER"), ("cz_ventas", "consecutivo", "INTEGER"),
+    nuevas = [("cz_usuarios", "empresa_id", "INTEGER"),
+              ("cz_usuarios", "intentos_fallidos", "INTEGER NOT NULL DEFAULT 0"),
+              ("cz_usuarios", "bloqueado_hasta", "TIMESTAMP"), ("cz_ventas", "consecutivo", "INTEGER"),
               ("cz_ajustes", "consecutivo", "INTEGER"), ("cz_nomina", "consecutivo", "INTEGER"),
               ("cz_negocio", "logo", "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"),
               ("cz_negocio", "logo_v", "INTEGER NOT NULL DEFAULT 0")]
@@ -2345,7 +2394,11 @@ def inicializar_bd():
                 if Usuario.query.filter(func.lower(Usuario.username) == user).first():
                     user += ".sg"
                 sg = Usuario(nombre="SoftGest", username=user, rol="superadmin")
-                sg.set_password(os.getenv("SUPERADMIN_PASSWORD") or os.getenv("ADMIN_PASSWORD") or "softgest123")
+                clave = os.getenv("SUPERADMIN_PASSWORD") or os.getenv("ADMIN_PASSWORD")
+                if not clave:
+                    clave = secrets.token_urlsafe(9)
+                    print(f"AVISO: no se definió SUPERADMIN_PASSWORD. Clave temporal de «{user}»: {clave}", flush=True)
+                sg.set_password(clave)
                 db.session.add(sg)
                 db.session.commit()
             except Exception:
