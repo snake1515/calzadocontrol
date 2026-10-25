@@ -488,6 +488,9 @@ class Produccion(EmpresaMixin, db.Model):
     nota = db.Column(db.String(255))
     usuario_id = db.Column(db.Integer, db.ForeignKey("cz_usuarios.id"))
     anulada = db.Column(db.Boolean, nullable=False, default=False)
+    # Pares que ya existían al empezar a usar la app: entran al inventario con su costo,
+    # pero no cuentan como producción del periodo.
+    es_inicial = db.Column(db.Boolean, nullable=False, default=False)
 
     producto = db.relationship("Producto", lazy="joined")
     usuario = db.relationship("Usuario", lazy="joined")

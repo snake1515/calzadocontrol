@@ -93,7 +93,7 @@ def total_mano_obra(modo, valor, pares):
 
 def registrar_produccion(producto, corrida, consumos, mano_obra, energia=0.0, gas_agua=0.0,
                          transporte=0.0, otros=0.0, otros_descripcion="", nota="", fecha=None,
-                         usuario_id=None, sin_materiales=False):
+                         usuario_id=None, sin_materiales=False, es_inicial=False):
     """corrida: {talla: pares}. consumos: {Insumo: cantidad}.
     mano_obra: lista de dicts {proceso, empleado (Empleado|None), responsable, modo, valor, pares}."""
     errores = []
@@ -140,7 +140,7 @@ def registrar_produccion(producto, corrida, consumos, mano_obra, energia=0.0, ga
         costo_energia=energia, costo_gas_agua=gas_agua,
         costo_transporte=transporte, costo_otros=otros,
         otros_descripcion=(otros_descripcion or "").strip() or None,
-        nota=nota or None, usuario_id=usuario_id,
+        nota=nota or None, usuario_id=usuario_id, es_inicial=es_inicial,
     )
     costo_insumos = 0.0
     for insumo, cant in consumos.items():

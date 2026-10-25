@@ -455,7 +455,8 @@ def inicio():
     ganancia = ingresos - costo_vendido
     unidades_vendidas = sum(v.unidades for v in ventas)
 
-    prods = Produccion.query.filter(Produccion.anulada.is_(False), Produccion.fecha >= ini,
+    prods = Produccion.query.filter(Produccion.anulada.is_(False), Produccion.es_inicial.is_(False),
+                                    Produccion.fecha >= ini,
                                     Produccion.fecha < fin).all()
     unidades_prod = sum(p.cantidad for p in prods)
     desglose = {"Materiales": sum(p.costo_insumos for p in prods)}
@@ -1285,7 +1286,7 @@ def producto_form(id=None):
                         costo_u = n(f.get("costo_inicial")) or prod.costo_estandar
                         registrar_produccion(prod, corrida, {}, [], otros=costo_u * sum(corrida.values()),
                                              otros_descripcion="Inventario inicial", nota="Inventario inicial",
-                                             usuario_id=current_user.id, sin_materiales=True)
+                                             usuario_id=current_user.id, sin_materiales=True, es_inicial=True)
                 db.session.commit()
                 flash(f"Referencia «{prod.etiqueta}» guardada.", "ok")
                 return redirect(url_for("producto_detalle", id=prod.id))
@@ -1297,6 +1298,55 @@ def producto_form(id=None):
     procs = [dict(proceso=p.proceso, valor=p.valor_par) for p in prod.procesos] if prod else []
     return render_template("producto_form.html", prod=prod, insumos=insumos_json(), receta=receta,
                            procesos=procs, lista_procesos=PROCESOS, lineas=LINEAS)
+
+
+@app.route("/productos/existencias", methods=["GET", "POST"])
+@rol_requerido("admin")
+def producto_existencias():
+    """Carga de pares terminados que ya estaban en bodega al empezar a usar la app."""
+    prods = Producto.query.filter_by(activo=True).order_by(Producto.linea, Producto.nombre, Producto.color).all()
+    if request.method == "POST":
+        f = request.form
+        fecha = fecha_form(f.get("fecha"))
+        cargas, errores = [], []
+        for p in prods:
+            corrida = {}
+            for t in p.rango_tallas:
+                c = int(n(f.get(f"c_{p.id}_{t}")))
+                if c < 0:
+                    errores.append(f"«{p.etiqueta}» talla {t}: la cantidad no puede ser negativa.")
+                elif c:
+                    corrida[t] = c
+            if not corrida:
+                continue
+            costo = n(f.get(f"costo_{p.id}"))
+            if costo <= 0:
+                errores.append(f"Escribe el costo por par de «{p.etiqueta}».")
+                continue
+            cargas.append((p, corrida, costo))
+        if not cargas and not errores:
+            errores.append("Escribe al menos una cantidad en alguna talla.")
+        if errores:
+            for m in errores:
+                flash(m, "error")
+        else:
+            try:
+                pares = 0
+                for p, corrida, costo in cargas:
+                    q = sum(corrida.values())
+                    registrar_produccion(p, corrida, {}, [], otros=costo * q, otros_descripcion="Inventario inicial",
+                                         nota="Inventario inicial", fecha=fecha, usuario_id=current_user.id,
+                                         sin_materiales=True, es_inicial=True)
+                    pares += q
+                db.session.commit()
+                flash(f"Existencias cargadas: {pares} pares en {len(cargas)} referencia(s). "
+                      "Ya se pueden vender; no cuentan como producción del periodo.", "ok")
+                return redirect(url_for("productos"))
+            except ErrorNegocio as e:
+                db.session.rollback()
+                for m in e.errores:
+                    flash(m, "error")
+    return render_template("existencias.html", prods=prods, f=request.form)
 
 
 @app.route("/productos/<int:id>/duplicar", methods=["POST"])
@@ -1356,7 +1406,7 @@ def producciones():
     ini, fin, desde, hasta = periodo()
     items = (Produccion.query.filter(Produccion.fecha >= ini, Produccion.fecha < fin)
              .order_by(Produccion.fecha.desc()).all())
-    validas = [p for p in items if not p.anulada]
+    validas = [p for p in items if not p.anulada and not p.es_inicial]
     unidades = sum(p.cantidad for p in validas)
     costo = sum(p.costo_total for p in validas)
     mo = sum(p.costo_mano_obra for p in validas)
@@ -2347,6 +2397,7 @@ def migrar_columnas():
     tablas = set(insp.get_table_names())
     nuevas = [("cz_usuarios", "empresa_id", "INTEGER"),
               ("cz_usuarios", "intentos_fallidos", "INTEGER NOT NULL DEFAULT 0"),
+              ("cz_producciones", "es_inicial", "BOOLEAN NOT NULL DEFAULT FALSE"),
               ("cz_usuarios", "bloqueado_hasta", "TIMESTAMP"), ("cz_ventas", "consecutivo", "INTEGER"),
               ("cz_ajustes", "consecutivo", "INTEGER"), ("cz_nomina", "consecutivo", "INTEGER"),
               ("cz_negocio", "logo", "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"),

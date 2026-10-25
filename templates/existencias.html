@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Cargar existencias{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Cargar existencias de calzado</h1>
+    <p>Para los pares terminados que ya están en bodega al empezar a usar la app. Escribe cuántos hay por talla y lo que costó cada par.</p></div>
+  <a class="btn sec" href="{{ url_for('productos') }}">← Referencias</a>
+</div>
+{% if not prods %}
+  <div class="note warn">Primero crea las referencias. <a href="{{ url_for('producto_form') }}">Crear referencia</a></div>
+{% else %}
+<form method="post" id="f">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="grid g-main">
+    <div>
+      {% for p in prods %}
+      <div class="card exi" data-id="{{ p.id }}">
+        <div class="card-head" style="margin-bottom:8px">
+          <div><h2>{{ p.etiqueta }}</h2><small class="muted">{{ p.linea }} · hoy hay {{ p.stock }} pares{% if p.costo_estandar %} · costo estándar {{ p.costo_estandar|cop }}{% endif %}</small></div>
+          <div class="field" style="margin:0;max-width:170px"><label>Costo por par ($)</label>
+            <input class="input r costo" type="number" min="0" step="any" name="costo_{{ p.id }}"
+              value="{{ f.get('costo_' ~ p.id) or ((p.costo_ref|round(0)|int) if p.costo_ref else '') }}"></div>
+        </div>
+        <div class="corrida">
+          {% for t in p.rango_tallas %}
+          <div><label>T {{ t }}{% if p.stock_talla(t) %} <span class="muted">({{ p.stock_talla(t) }})</span>{% endif %}</label>
+            <input class="input cant" type="number" min="0" step="1" name="c_{{ p.id }}_{{ t }}" value="{{ f.get('c_' ~ p.id ~ '_' ~ t, '') }}" placeholder="0"></div>
+          {% endfor %}
+        </div>
+        <p class="hint sub" style="margin:8px 0 0"></p>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card summary">
+      <h2>Resumen de la carga</h2>
+      <div class="big-num" id="pares">0</div>
+      <p class="hint">pares</p>
+      <div class="sum-line"><span>Referencias</span><b id="refs">0</b></div>
+      <div class="sum-line"><span>Valor del inventario</span><b id="valor">$ 0</b></div>
+      <div class="field" style="margin-top:12px"><label>Fecha del inventario</label><input class="input" type="date" name="fecha" value="{{ f.fecha or hoy }}" max="{{ hoy }}"></div>
+      <div class="note" style="margin-bottom:12px">Los pares se <b>suman</b> a lo que ya hay. No descuentan materiales ni cuentan como producción del periodo: su costo entra a la ganancia solo cuando se venden.</div>
+      <div id="warn" class="note warn" style="display:none;margin-bottom:10px"></div>
+      <button class="btn block" id="go">Cargar existencias</button>
+      <p class="hint" style="margin-top:10px">Si no sabes el costo exacto, usa el costo estándar de la ficha (viene escrito) o un estimado. Si te equivocas, abre el lote en Producción y anúlalo.</p>
+    </div>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  const calc = () => {
+    let pares = 0, valor = 0, refs = 0; const w = [];
+    document.querySelectorAll('.exi').forEach(card => {
+      const q = [...card.querySelectorAll('.cant')].reduce((s, i) => s + Math.max(Math.round(val(i)), 0), 0);
+      const c = val(card.querySelector('.costo'));
+      card.querySelector('.sub').textContent = q ? `${q} pares × ${COP(c)} = ${COP(q * c)}` : '';
+      card.style.borderColor = q ? 'var(--accent)' : '';
+      if (q) { refs++; pares += q; valor += q * c; if (c <= 0) w.push(card.querySelector('h2').textContent + ': falta el costo por par'); }
+    });
+    document.getElementById('pares').textContent = NUM(pares, 0);
+    document.getElementById('refs').textContent = refs;
+    document.getElementById('valor').textContent = COP(valor);
+    const wEl = document.getElementById('warn'); wEl.style.display = w.length ? '' : 'none'; wEl.innerHTML = w.map(esc).join('<br>');
+    document.getElementById('go').disabled = !pares || w.length > 0;
+  };
+  document.querySelectorAll('#f input').forEach(i => i.addEventListener('input', calc)); if (document.getElementById('f')) calc();
+</script>
+{% endblock %}

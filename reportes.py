@@ -88,7 +88,8 @@ def generar(desde, hasta, agrupar):
                                  Activo.fecha_compra <= hasta):
         filas[b(a.fecha_compra)]["compras_eq"] += a.valor
     # Producción
-    for p in Produccion.query.filter(Produccion.anulada.is_(False), Produccion.fecha >= ini,
+    for p in Produccion.query.filter(Produccion.anulada.is_(False), Produccion.es_inicial.is_(False),
+                                     Produccion.fecha >= ini,
                                      Produccion.fecha < fin):
         f = filas[b(p.fecha.date())]
         f["unid_prod"] += p.cantidad

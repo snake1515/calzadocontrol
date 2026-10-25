@@ -26,7 +26,7 @@
     {% for p in items %}
       <tr class="{{ 'anulada' if p.anulada }}">
         <td><a href="{{ url_for('produccion_detalle', id=p.id) }}">{{ p.fecha|fecha }}</a></td>
-        <td><b>{{ p.producto.etiqueta }}</b>{% if p.anulada %} <span class="badge err">Anulada</span>{% endif %}{% if p.nota %}<br><small>{{ p.nota }}</small>{% endif %}</td>
+        <td><b>{{ p.producto.etiqueta }}</b>{% if p.es_inicial %} <span class="badge gray">Inventario inicial</span>{% endif %}{% if p.anulada %} <span class="badge err">Anulada</span>{% endif %}{% if p.nota %}<br><small>{{ p.nota }}</small>{% endif %}</td>
         <td><small>{{ p.corrida_txt }}</small></td>
         <td class="num">{{ p.cantidad|num }}</td>
         <td class="num">{{ p.costo_insumos|cop }}</td>
