@@ -184,10 +184,10 @@ def anular_produccion(prod):
         if hay < t.cantidad:
             errores.append(f"Talla {t.talla}: quedan {hay} pares y esta producción fue de {t.cantidad}. "
                            "Algunos ya se vendieron; anula primero esas ventas.")
-    pagadas = {m.nomina_id for m in prod.mano_obra if m.nomina_id}
+    pagadas = {m.nomina.numero for m in prod.mano_obra if m.nomina_id and m.nomina}
     if pagadas:
         errores.append("La mano de obra de este lote ya se pagó en nómina "
-                       f"({', '.join(f'NM-{n:05d}' for n in sorted(pagadas))}). Anula primero esa nómina.")
+                       f"({', '.join(sorted(pagadas))}). Anula primero esa nómina.")
     if errores:
         raise ErrorNegocio(errores)
     p.costo_promedio = _quitar_de_promedio(p.stock, p.costo_promedio, prod.cantidad, prod.costo_unitario)

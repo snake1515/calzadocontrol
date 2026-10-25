@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -18,10 +19,18 @@ F_REG = os.path.join(FONT_DIR, "DejaVuSans.ttf")
 F_BOLD = os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf")
 LOGO = os.path.join(os.path.dirname(__file__), "static", "logo.jpg")
 HAY_LOGO = os.path.exists(LOGO)
-LOGO_RATIO = 1.0
-if HAY_LOGO:
-    with Image.open(LOGO) as _im:
-        LOGO_RATIO = _im.height / _im.width
+
+
+def _logo(negocio):
+    """Logo de la empresa (subido en Datos del negocio) o el genérico de la app."""
+    try:
+        if getattr(negocio, "logo", None):
+            return Image.open(io.BytesIO(negocio.logo)).convert("RGB")
+        if HAY_LOGO:
+            return Image.open(LOGO).convert("RGB")
+    except Exception:
+        pass
+    return None
 pdfmetrics.registerFont(TTFont("DV", F_REG))
 pdfmetrics.registerFont(TTFont("DVB", F_BOLD))
 
@@ -35,7 +44,7 @@ NOTA_LEGAL = "Documento soporte de venta. No es factura electrónica de venta."
 
 
 def numero(venta, prefijo="CZ"):
-    return f"{(prefijo or 'CZ').strip().upper()}-{venta.id:06d}"
+    return f"{(prefijo or 'CZ').strip().upper()}-{(venta.consecutivo or venta.id):06d}"
 
 
 def cop(v):
@@ -62,7 +71,7 @@ def _datos(venta, negocio):
         vendedor=venta.usuario.nombre if venta.usuario else "", items=items, totales=totales,
         unidades=venta.unidades, total=venta.total_factura, anulada=venta.anulada,
         abonado=venta.pagado if credito else None, saldo=venta.saldo if credito else None,
-        mensaje=negocio.mensaje or "", nota=venta.nota or "",
+        mensaje=negocio.mensaje or "", nota=venta.nota or "", logo=_logo(negocio),
     )
 
 
@@ -82,9 +91,10 @@ def _encabezado_pdf(c, d, titulo, x0, x1, y):
     c.setFillColor(HexColor(ACENTO))
     c.rect(0, H - 8 * mm, W, 8 * mm, stroke=0, fill=1)
     xt = x0
-    if HAY_LOGO:
+    lg = d.get("logo")
+    if lg:
         lw = 30 * mm
-        c.drawImage(LOGO, x0, y - 24 * mm, width=lw, height=lw * LOGO_RATIO, mask=None)
+        c.drawImage(ImageReader(lg), x0, y - 24 * mm, width=lw, height=lw * lg.height / lg.width, mask=None)
         xt = x0 + lw + 5 * mm
     c.setFillColor(HexColor(TINTA))
     c.setFont("DVB", 18)
@@ -95,7 +105,7 @@ def _encabezado_pdf(c, d, titulo, x0, x1, y):
     for ln in d["lineas_neg"]:
         c.drawString(xt, yy, ln)
         yy -= 4.6 * mm
-    if HAY_LOGO:
+    if lg:
         yy = min(yy, y - 26 * mm)
     c.setFillColor(HexColor(TINTA))
     c.setFont("DVB", 12)
@@ -262,14 +272,14 @@ def jpg(venta, negocio):
     alto_items = sum(46 * len(cortar(it["nombre"], F["item"], W - 2 * M - 300)) + 74 for it in d["items"])
     alto_items += 50 * (len(d["totales"]) if len(d["totales"]) > 1 else 0) + (110 if d["saldo"] is not None else 0)
     LOGO_W = 380
-    H = 640 + (int(LOGO_W * LOGO_RATIO) + 30 if HAY_LOGO else 0) + 44 * len(d["lineas_neg"]) + alto_items + 280 + (60 if d["nota"] else 0) + (50 if d["doc"] else 0)
+    lg = d.get("logo")
+    H = 640 + (int(LOGO_W * lg.height / lg.width) + 30 if lg else 0) + 44 * len(d["lineas_neg"]) + alto_items + 280 + (60 if d["nota"] else 0) + (50 if d["doc"] else 0)
     img = Image.new("RGB", (W, H), "white")
     g = ImageDraw.Draw(img)
 
     g.rectangle([0, 0, W, 18], fill=ACENTO)
     y = 70
-    if HAY_LOGO:
-        lg = Image.open(LOGO).convert("RGB")
+    if lg:
         lg = lg.resize((LOGO_W, LOGO_W * lg.height // lg.width), Image.LANCZOS)
         img.paste(lg, ((W - LOGO_W) // 2, 50))
         y = 50 + lg.height + 30
@@ -352,13 +362,13 @@ def jpg(venta, negocio):
 
 # ------------------------------------------------------- Documento de egreso
 def numero_egreso(a):
-    return f"EG-{a.id:06d}"
+    return a.numero
 
 
 def egreso_pdf(a, negocio):
     """Documento de egreso por ajuste de inventario (pérdida, conteo físico, daño...)."""
     lineas_neg = _lineas_negocio(negocio)
-    d = dict(negocio=negocio.nombre or "Mi negocio", lineas_neg=lineas_neg, numero=numero_egreso(a),
+    d = dict(negocio=negocio.nombre or "Mi negocio", lineas_neg=lineas_neg, numero=numero_egreso(a), logo=_logo(negocio),
              fecha=a.fecha.strftime("%d/%m/%Y"))
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
@@ -467,7 +477,7 @@ def egreso_pdf(a, negocio):
 # ------------------------------------------------------ Desprendible de nómina
 def nomina_pdf(n, negocio):
     """Desprendible de pago para el empleado."""
-    d = dict(negocio=negocio.nombre or "Mi negocio", lineas_neg=_lineas_negocio(negocio), numero=n.numero,
+    d = dict(negocio=negocio.nombre or "Mi negocio", lineas_neg=_lineas_negocio(negocio), numero=n.numero, logo=_logo(negocio),
              fecha=n.fecha_pago.strftime("%d/%m/%Y"))
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)

@@ -8,18 +8,22 @@ from functools import wraps
 from urllib.parse import quote
 
 from dotenv import load_dotenv
-from flask import (Flask, Response, abort, flash, redirect, render_template,
-                   request, session, url_for)
+from flask import (Flask, Response, abort, flash, g, redirect, render_template,
+                   request, send_file, session, url_for)
 from flask_login import (LoginManager, current_user, login_required,
                          login_user, logout_user)
 from sqlalchemy import func
 
-from models import (CATEGORIAS_GASTO, CATEGORIAS_INSUMO, LINEAS, METODOS_PAGO, MODOS_MO, MOTIVOS_AJUSTE,
+from models import (ESTADOS_EMPRESA, Empresa, EmpresaMixin, empresa_id_actual, set_empresa,
+                    CATEGORIAS_GASTO, CATEGORIAS_INSUMO, LINEAS, METODOS_PAGO, MODOS_MO, MOTIVOS_AJUSTE,
                     PROCESOS, ROLES, TIPOS_CLIENTE, TIPOS_PAGO, UNIDADES, Abono, Activo, Ajuste, Cliente,
                     CompraInsumo, Configuracion, DatosNegocio, Devolucion, Empleado, Gasto, Insumo,
                     PagoNomina, Preparacion, PrepRecetaItem, ProcesoTarifa, Produccion, ProduccionMO,
                     Producto, RecetaItem, Usuario, Venta, VentaItem, ahora, db)
 import comprobantes
+import demo
+import threading
+import unicodedata
 import nomina as nom
 import reportes as rpt
 import clientes_calc as ccalc
@@ -43,6 +47,8 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True, "pool_recycle"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 NOMBRE_NEGOCIO = os.getenv("NOMBRE_NEGOCIO", "CalzadoControl")
+# WhatsApp de SoftGest para que los clientes activen su plan (solo números, con 57)
+SOFTGEST_WA = "".join(ch for ch in os.getenv("SOFTGEST_WHATSAPP", "") if ch.isdigit())
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 60 * 60 * 24 * 30
 STATIC_V = (os.getenv("RENDER_GIT_COMMIT") or secrets.token_hex(4))[:8]
 try:
@@ -141,7 +147,7 @@ def rol_requerido(*roles):
         @wraps(f)
         @login_required
         def envoltura(*a, **kw):
-            if current_user.rol not in roles:
+            if current_user.rol_efectivo not in roles:
                 flash("No tienes permiso para entrar a esa sección.", "error")
                 return redirect(url_for("inicio"))
             return f(*a, **kw)
@@ -163,34 +169,104 @@ def verificar_csrf():
             return redirect(request.url)
 
 
-_cache_neg = {"valor": None, "hasta": 0.0}
+# Rutas que se pueden usar sin empresa activa o con la empresa bloqueada
+LIBRES = {"static", "login", "logout", "cuenta", "bloqueado", "logo"}
+
+
+@app.before_request
+def contexto_empresa():
+    """Define la empresa activa de esta petición: la del usuario, o la que SoftGest está atendiendo."""
+    set_empresa(None)
+    g.empresa = None
+    g.soporte = False
+    if not current_user.is_authenticated:
+        return None
+    ep = request.endpoint or ""
+    if current_user.rol == "superadmin":
+        emp = db.session.get(Empresa, session["soporte_empresa"]) if session.get("soporte_empresa") else None
+        if emp:
+            set_empresa(emp.id)
+            g.empresa, g.soporte = emp, True
+        elif not ep.startswith("sg_") and ep not in LIBRES:
+            return redirect(url_for("sg_panel"))
+        return None
+    emp = current_user.empresa
+    if emp is None:
+        logout_user()
+        return redirect(url_for("login"))
+    set_empresa(emp.id)
+    g.empresa = emp
+    if emp.bloqueada and ep not in LIBRES:
+        return redirect(url_for("bloqueado"))
+    if ep.startswith("sg_"):
+        abort(404)
+    return None
+
+
+_cache_neg = {}
 
 
 def negocio_cache(refrescar=False):
-    """Nombre y prefijo del negocio con caché de 10 minutos (evita una consulta por página)."""
+    """Nombre y prefijo del negocio de la empresa activa, con caché de 10 minutos."""
     import time
-    if refrescar or _cache_neg["valor"] is None or time.time() > _cache_neg["hasta"]:
-        val = dict(nombre=NOMBRE_NEGOCIO, prefijo="CZ")
+    eid = empresa_id_actual()
+    if eid is None:
+        return dict(nombre=NOMBRE_NEGOCIO, prefijo="CZ", logo_v=0)
+    c = _cache_neg.get(eid)
+    if refrescar or c is None or time.time() > c[1]:
+        val = dict(nombre=NOMBRE_NEGOCIO, prefijo="CZ", logo_v=0)
         try:
-            neg = db.session.get(DatosNegocio, 1)
+            neg = DatosNegocio.query.first()
             if neg:
-                val = dict(nombre=neg.nombre or NOMBRE_NEGOCIO, prefijo=(neg.prefijo or "CZ").upper())
+                val = dict(nombre=neg.nombre or NOMBRE_NEGOCIO, prefijo=(neg.prefijo or "CZ").upper(),
+                           logo_v=neg.logo_v if neg.logo else 0)
         except Exception:
             db.session.rollback()
-        _cache_neg.update(valor=val, hasta=time.time() + 600)
-    return _cache_neg["valor"]
+        c = _cache_neg[eid] = (val, time.time() + 600)
+    return c[0]
 
 
 def num_doc(v):
-    return f"{negocio_cache()['prefijo']}-{v.id:06d}"
+    return f"{negocio_cache()['prefijo']}-{(v.consecutivo or v.id):06d}"
 
 
 @app.context_processor
 def contexto():
     def puede(*roles):
-        return current_user.is_authenticated and current_user.rol in roles
+        return current_user.is_authenticated and current_user.rol_efectivo in roles
+    neg = negocio_cache()
+    emp = getattr(g, "empresa", None)
     return dict(csrf_token=csrf_token, puede=puede, ROLES=ROLES, STATIC_V=STATIC_V,
-                NOMBRE_NEGOCIO=negocio_cache()["nombre"], hoy=ahora().date().isoformat(), num_doc=num_doc)
+                NOMBRE_NEGOCIO=neg["nombre"], LOGO_V=neg["logo_v"], hoy=ahora().date().isoformat(), num_doc=num_doc,
+                EMPRESA=emp, SOPORTE=getattr(g, "soporte", False), aviso_plan=aviso_plan(emp),
+                wa_activar=wa_activar(emp))
+
+
+def aviso_plan(emp):
+    """Barra superior con los días que le quedan a la demo (o a la suscripción si está por vencer)."""
+    if not emp or emp.vence is None:
+        return None
+    d = emp.dias_restantes
+    if emp.estado == "activa" and d > 7:
+        return None
+    nivel = "err" if d <= 2 else ("warn" if d <= 5 else "info")
+    if d < 0:
+        txt = "Tu acceso venció."
+    elif d == 0:
+        txt = "Hoy es el último día de tu " + ("demo" if emp.estado == "demo" else "plan") + "."
+    else:
+        txt = (f"Demo gratis: te quedan <b>{d} día{'s' if d != 1 else ''}</b>" if emp.estado == "demo"
+               else f"Tu plan vence en <b>{d} día{'s' if d != 1 else ''}</b>") + f" (hasta el {emp.vence.strftime('%d/%m/%Y')})."
+    total = 15 if emp.estado == "demo" else 30
+    return dict(texto=txt, nivel=nivel, dias=d, pct=max(min(d / total * 100, 100), 0))
+
+
+def wa_activar(emp):
+    if not emp or not SOFTGEST_WA:
+        return None
+    msg = (f"Hola SoftGest, soy de {emp.nombre}. Quiero activar CalzadoControl"
+           + (" (estoy en la demo)." if emp.estado == "demo" else "."))
+    return f"https://wa.me/{SOFTGEST_WA}?text={quote(msg)}"
 
 
 @app.template_filter("cop")
@@ -322,9 +398,9 @@ def cuenta():
 @app.route("/")
 @login_required
 def inicio():
-    if current_user.rol == "produccion":
+    if current_user.rol_efectivo == "produccion":
         return redirect(url_for("producciones"))
-    if current_user.rol == "vendedor":
+    if current_user.rol_efectivo == "vendedor":
         return redirect(url_for("venta_nueva"))
 
     ini, fin, desde, hasta = periodo()
@@ -777,7 +853,7 @@ def cartera():
     filtro = request.args.get("f", "")
     ventas_c = [v for v in Venta.query.filter(Venta.anulada.is_(False), Venta.condicion == "credito")
                 .order_by(Venta.vence, Venta.id).all() if v.saldo > 0.5]
-    if current_user.rol == "vendedor":
+    if current_user.rol_efectivo == "vendedor":
         ventas_c = [v for v in ventas_c if v.usuario_id == current_user.id]
     total = sum(v.saldo for v in ventas_c)
     vencidas = [v for v in ventas_c if v.vencida]
@@ -1005,7 +1081,7 @@ def compras():
                               cantidad=f"{filtro_num(c.cantidad, 3)} {c.insumo.unidad}", unitario=c.costo_unitario,
                               total=c.costo_total, proveedor=c.proveedor, nota=c.nota,
                               anulada=c.anulada, obj=c))
-    if tipo in ("", "equipos") and current_user.rol == "admin":
+    if tipo in ("", "equipos") and current_user.rol_efectivo == "admin":
         for a in (Activo.query.filter(Activo.eliminado.is_(False), Activo.fecha_compra >= ini.date(),
                                       Activo.fecha_compra < fin.date()).all()):
             filas.append(dict(tipo="equipo", fecha=a.fecha_compra,
@@ -1454,7 +1530,7 @@ def ventas():
     ini, fin, desde, hasta = periodo()
     cond = request.args.get("cond", "")
     q = Venta.query.filter(Venta.fecha >= ini, Venta.fecha < fin)
-    if current_user.rol == "vendedor":
+    if current_user.rol_efectivo == "vendedor":
         q = q.filter(Venta.usuario_id == current_user.id)
     if cond in ("contado", "credito"):
         q = q.filter(Venta.condicion == cond)
@@ -1532,7 +1608,7 @@ def venta_nueva():
 @rol_requerido("admin", "vendedor")
 def venta_detalle(id):
     v = db.session.get(Venta, id) or abort(404)
-    if current_user.rol == "vendedor" and v.usuario_id != current_user.id:
+    if current_user.rol_efectivo == "vendedor" and v.usuario_id != current_user.id:
         abort(404)
     devs = Devolucion.query.filter_by(venta_id=id).order_by(Devolucion.fecha).all()
     cli = db.session.get(Cliente, v.cliente_id) if v.cliente_id else None
@@ -1544,7 +1620,7 @@ def venta_detalle(id):
 @rol_requerido("admin", "vendedor")
 def venta_comprobante(id, fmt):
     v = db.session.get(Venta, id) or abort(404)
-    if current_user.rol == "vendedor" and v.usuario_id != current_user.id:
+    if current_user.rol_efectivo == "vendedor" and v.usuario_id != current_user.id:
         abort(404)
     negocio = DatosNegocio.actual()
     nombre = f"{comprobantes.numero(v, negocio.prefijo)}.{fmt}"
@@ -1601,6 +1677,7 @@ def negocio():
         f = request.form
         nombre = f.get("nombre", "").strip()
         iva = n(f.get("iva_pct"))
+        archivo = request.files.get("logo")
         if not nombre:
             flash("El nombre del negocio es obligatorio.", "error")
         elif not 0 <= iva <= 100:
@@ -1612,12 +1689,65 @@ def negocio():
                 setattr(neg, campo, (f.get(campo, "").strip()[:largo]) or None)
             neg.prefijo = "".join(ch for ch in f.get("prefijo", "CZ").upper() if ch.isalnum())[:8] or "CZ"
             neg.iva_pct = iva
+            if f.get("quitar_logo"):
+                neg.logo, neg.logo_v = None, (neg.logo_v or 0) + 1
+            elif archivo and archivo.filename:
+                try:
+                    neg.logo = _procesar_logo(archivo.read())
+                    neg.logo_v = (neg.logo_v or 0) + 1
+                except Exception:
+                    flash("No se pudo leer el logo. Sube una imagen JPG o PNG.", "error")
+                    db.session.rollback()
+                    return redirect(url_for("negocio"))
             db.session.commit()
             negocio_cache(refrescar=True)
             flash("Datos del negocio guardados. Así saldrán en los recibos.", "ok")
             return redirect(url_for("negocio"))
     ultima = Venta.query.order_by(Venta.id.desc()).first()
     return render_template("negocio.html", neg=neg, ultima=ultima)
+
+
+def _procesar_logo(data):
+    """Convierte la imagen subida en un JPG cuadrado de hasta 600 px con fondo blanco."""
+    from PIL import Image
+    import io
+    im = Image.open(io.BytesIO(data))
+    im.load()
+    if im.mode in ("RGBA", "LA", "P"):
+        im = im.convert("RGBA")
+        fondo = Image.new("RGB", im.size, "white")
+        fondo.paste(im, mask=im.split()[-1])
+        im = fondo
+    else:
+        im = im.convert("RGB")
+    im.thumbnail((600, 600))
+    lado = max(im.size)
+    lienzo = Image.new("RGB", (lado, lado), "white")
+    lienzo.paste(im, ((lado - im.width) // 2, (lado - im.height) // 2))
+    buf = io.BytesIO()
+    lienzo.save(buf, "JPEG", quality=90)
+    return buf.getvalue()
+
+
+@app.route("/logo.jpg")
+def logo():
+    """Logo de la empresa activa (o el genérico de la app)."""
+    if empresa_id_actual():
+        neg = DatosNegocio.query.first()
+        if neg and neg.logo:
+            r = Response(neg.logo, mimetype="image/jpeg")
+            r.headers["Cache-Control"] = "private, max-age=2592000"
+            return r
+    return send_file(os.path.join(app.root_path, "static", "logo_sm.jpg"), max_age=2592000)
+
+
+@app.route("/bloqueado")
+@login_required
+def bloqueado():
+    emp = getattr(g, "empresa", None)
+    if not emp or not emp.bloqueada:
+        return redirect(url_for("inicio"))
+    return render_template("bloqueado.html", emp=emp, wa=wa_activar(emp))
 
 
 # ---------------------------------------------------------------- empleados
@@ -1893,7 +2023,8 @@ def ajuste_anular(id):
 @rol_requerido("admin")
 def usuarios():
     return render_template("usuarios.html",
-                           items=Usuario.query.order_by(Usuario.activo.desc(), Usuario.nombre).all())
+                           items=Usuario.query.filter_by(empresa_id=empresa_id_actual())
+                           .order_by(Usuario.activo.desc(), Usuario.nombre).all())
 
 
 @app.route("/usuarios/nuevo", methods=["GET", "POST"])
@@ -1901,7 +2032,7 @@ def usuarios():
 @rol_requerido("admin")
 def usuario_form(id=None):
     u = db.session.get(Usuario, id) if id else None
-    if id and not u:
+    if id and (not u or u.empresa_id != empresa_id_actual()):
         abort(404)
     if request.method == "POST":
         f = request.form
@@ -1913,7 +2044,8 @@ def usuario_form(id=None):
         if not nombre or not username:
             flash("Nombre y usuario son obligatorios.", "error")
         elif dup:
-            flash("Ese nombre de usuario ya existe.", "error")
+            flash("Ese nombre de usuario ya está en uso (puede ser de otra empresa). Prueba con otro, "
+                  "por ejemplo agregando el nombre de tu negocio.", "error")
         elif rol not in ROLES:
             flash("Rol no válido.", "error")
         elif not u and len(clave) < 6:
@@ -1922,7 +2054,7 @@ def usuario_form(id=None):
             flash("No puedes quitarte el rol de administrador ni desactivarte a ti mismo.", "error")
         else:
             if not u:
-                u = Usuario()
+                u = Usuario(empresa_id=empresa_id_actual())
                 db.session.add(u)
             u.nombre, u.username, u.rol, u.activo = nombre, username, rol, activo
             if clave:
@@ -1936,6 +2068,223 @@ def usuario_form(id=None):
     return render_template("usuario_form.html", u=u)
 
 
+# ------------------------------------------------------------ panel SoftGest
+def sg_requerido(f):
+    @wraps(f)
+    @login_required
+    def envoltura(*a, **kw):
+        if current_user.rol != "superadmin":
+            abort(404)
+        return f(*a, **kw)
+    return envoltura
+
+
+def _slug(texto):
+    t = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode().lower()
+    base = "".join(ch for ch in t if ch.isalnum())[:20] or "empresa"
+    slug, k = base, 2
+    while Empresa.query.filter_by(slug=slug).first():
+        slug, k = f"{base}{k}", k + 1
+    return slug
+
+
+def crear_empresa(nombre, estado, dias, admin_user, admin_password, contacto=None, telefono=None, nota=None):
+    """Crea la empresa con sus datos de negocio, configuración y su usuario administrador."""
+    emp = Empresa(nombre=nombre[:120], slug=_slug(nombre), estado=estado, contacto=contacto, telefono=telefono,
+                  nota=nota, vence=(ahora().date() + timedelta(days=dias)) if dias else None)
+    db.session.add(emp)
+    db.session.flush()
+    db.session.add(DatosNegocio(empresa_id=emp.id, nombre=emp.nombre, telefono=telefono))
+    db.session.add(Configuracion(empresa_id=emp.id))
+    adm = Usuario(nombre=contacto or "Administrador", username=(admin_user or f"{emp.slug}.admin").lower(),
+                  rol="admin", empresa_id=emp.id)
+    adm.set_password(admin_password)
+    db.session.add(adm)
+    db.session.commit()
+    return emp, adm
+
+
+def _cargar_demo_en_segundo_plano(eid, admin_id):
+    """La demo hace miles de registros: se carga en un hilo para no bloquear la petición."""
+    def correr():
+        with app.app_context():
+            set_empresa(eid)
+            try:
+                demo.cargar(db.session.get(Empresa, eid), db.session.get(Usuario, admin_id))
+            except Exception as e:
+                db.session.rollback()
+                print("Error cargando la demo:", e, flush=True)
+            finally:
+                emp = db.session.get(Empresa, eid)
+                emp.demo_cargando = False
+                db.session.commit()
+                db.session.remove()
+                set_empresa(None)
+    threading.Thread(target=correr, daemon=True).start()
+
+
+# Orden de borrado (primero los hijos) para vaciar los datos de una empresa
+ORDEN_BORRADO = ["AjusteItem", "Ajuste", "DevolucionItem", "Devolucion", "Abono", "VentaItem", "Venta",
+                 "ProduccionMO", "PagoNomina", "ProduccionConsumo", "ProduccionTalla", "Produccion",
+                 "PreparacionConsumo", "Preparacion", "CompraInsumo", "RecetaItem", "ProcesoTarifa", "ProductoTalla",
+                 "Producto", "PrepRecetaItem", "Insumo", "Empleado", "Cliente", "Gasto", "Activo"]
+
+
+def vaciar_empresa(eid):
+    import models
+    for nombre in ORDEN_BORRADO:
+        m = getattr(models, nombre)
+        db.session.query(m).filter(m.empresa_id == eid).delete(synchronize_session=False)
+    demo_users = Usuario.query.filter(Usuario.empresa_id == eid,
+                                      (Usuario.username.like("%.produccion")) | (Usuario.username.like("%.ventas"))).all()
+    for u in demo_users:
+        db.session.delete(u)
+    db.session.commit()
+
+
+def _resumen_empresas():
+    """Datos de uso de cada empresa (sin filtro de empresa)."""
+    def por_empresa(q):
+        return dict(q.execution_options(todas_empresas=True).all())
+    ultima = por_empresa(db.session.query(Venta.empresa_id, func.max(Venta.fecha)).group_by(Venta.empresa_id))
+    nventas = por_empresa(db.session.query(Venta.empresa_id, func.count(Venta.id)).group_by(Venta.empresa_id))
+    nprod = por_empresa(db.session.query(Producto.empresa_id, func.count(Producto.id)).group_by(Producto.empresa_id))
+    nusers = dict(db.session.query(Usuario.empresa_id, func.count(Usuario.id)).group_by(Usuario.empresa_id).all())
+    return ultima, nventas, nprod, nusers
+
+
+@app.route("/softgest")
+@sg_requerido
+def sg_panel():
+    session.pop("soporte_empresa", None)
+    set_empresa(None)
+    empresas = Empresa.query.order_by(Empresa.creado.desc()).all()
+    ultima, nventas, nprod, nusers = _resumen_empresas()
+    admins = {}
+    for u in Usuario.query.filter(Usuario.rol == "admin").order_by(Usuario.id).all():
+        admins.setdefault(u.empresa_id, u)
+    return render_template("sg_panel.html", empresas=empresas, ultima=ultima, nventas=nventas, nprod=nprod,
+                           nusers=nusers, admins=admins,
+                           cuenta={k: sum(1 for e in empresas if e.estado == k) for k in ESTADOS_EMPRESA},
+                           vencidas=sum(1 for e in empresas if e.bloqueada and e.estado != "suspendida"))
+
+
+@app.route("/softgest/nueva", methods=["GET", "POST"])
+@sg_requerido
+def sg_nueva():
+    f = request.form
+    if request.method == "POST":
+        nombre = f.get("nombre", "").strip()
+        user = f.get("admin_user", "").strip().lower()
+        clave = f.get("admin_password", "")
+        estado = f.get("estado") if f.get("estado") in ("demo", "activa") else "demo"
+        dias = int(n(f.get("dias"))) if estado == "demo" or f.get("con_vencimiento") else 0
+        if not nombre:
+            flash("Escribe el nombre de la empresa.", "error")
+        elif not user or " " in user:
+            flash("Escribe el usuario del administrador (sin espacios).", "error")
+        elif Usuario.query.filter(func.lower(Usuario.username) == user).first():
+            flash("Ese usuario ya existe. Usa otro (ej: nombre del negocio + .admin).", "error")
+        elif len(clave) < 6:
+            flash("La contraseña debe tener al menos 6 caracteres.", "error")
+        elif estado == "demo" and dias < 1:
+            flash("Indica cuántos días dura la demo.", "error")
+        else:
+            emp, adm = crear_empresa(nombre, estado, dias, user, clave, f.get("contacto", "").strip() or None,
+                                     f.get("telefono", "").strip() or None, f.get("nota", "").strip() or None)
+            msg = f"Empresa «{emp.nombre}» creada. Usuario: {adm.username} · clave: la que escribiste."
+            if f.get("cargar_demo"):
+                emp.demo_cargando = True
+                db.session.commit()
+                _cargar_demo_en_segundo_plano(emp.id, adm.id)
+                msg += " Los datos de ejemplo se están cargando (1 a 3 minutos)."
+            flash(msg, "ok")
+            return redirect(url_for("sg_panel"))
+    return render_template("sg_empresa.html", e=None, estados=ESTADOS_EMPRESA, f=f)
+
+
+@app.route("/softgest/<int:id>", methods=["GET", "POST"])
+@sg_requerido
+def sg_empresa(id):
+    e = db.session.get(Empresa, id) or abort(404)
+    f = request.form
+    if request.method == "POST":
+        accion = f.get("accion", "guardar")
+        hoy_d = ahora().date()
+        if accion == "guardar":
+            e.nombre = f.get("nombre", e.nombre).strip()[:120] or e.nombre
+            e.contacto = f.get("contacto", "").strip()[:120] or None
+            e.telefono = f.get("telefono", "").strip()[:40] or None
+            e.nota = f.get("nota", "").strip()[:255] or None
+            if f.get("estado") in ESTADOS_EMPRESA:
+                e.estado = f.get("estado")
+            e.vence = _fecha(f.get("vence"))
+            flash("Cambios guardados.", "ok")
+        elif accion.startswith("extender"):
+            dias = int(accion.split(":")[1])
+            base = max(e.vence or hoy_d, hoy_d)
+            e.vence = base + timedelta(days=dias)
+            if e.estado == "suspendida":
+                e.estado = "demo"
+            flash(f"Acceso extendido hasta el {e.vence.strftime('%d/%m/%Y')}.", "ok")
+        elif accion == "activar":
+            e.estado, e.vence = "activa", None
+            flash(f"«{e.nombre}» activada sin vencimiento (pago único). Ya no ve el contador de demo.", "ok")
+        elif accion == "suspender":
+            e.estado = "suspendida"
+            flash(f"«{e.nombre}» suspendida: sus usuarios ya no pueden entrar. Los datos se conservan.", "ok")
+        elif accion == "clave":
+            u = db.session.get(Usuario, int(n(f.get("usuario_id"))))
+            clave = f.get("nueva_clave", "")
+            if not u or u.empresa_id != e.id or len(clave) < 6:
+                flash("Elige el usuario y escribe una clave de al menos 6 caracteres.", "error")
+            else:
+                u.set_password(clave)
+                u.activo = True
+                flash(f"Clave de {u.username} cambiada.", "ok")
+        elif accion == "vaciar":
+            if f.get("confirmar", "").strip().lower() != e.nombre.strip().lower():
+                flash("Para vaciar escribe exactamente el nombre de la empresa.", "error")
+            else:
+                set_empresa(e.id)
+                vaciar_empresa(e.id)
+                set_empresa(None)
+                flash(f"Datos de «{e.nombre}» vaciados. Quedan sus usuarios, datos del negocio y configuración.", "ok")
+        elif accion == "demo":
+            if e.demo_cargando:
+                flash("La demo ya se está cargando.", "error")
+            elif Producto.query.filter(Producto.empresa_id == e.id).execution_options(todas_empresas=True).first():
+                flash("Esta empresa ya tiene referencias. Vacíala antes de cargar los datos de ejemplo.", "error")
+            else:
+                adm = Usuario.query.filter_by(empresa_id=e.id, rol="admin").first()
+                e.demo_cargando = True
+                db.session.commit()
+                _cargar_demo_en_segundo_plano(e.id, adm.id)
+                flash("Cargando datos de ejemplo (1 a 3 minutos). Recarga esta página para ver el avance.", "ok")
+        db.session.commit()
+        return redirect(url_for("sg_empresa", id=id))
+    usuarios = Usuario.query.filter_by(empresa_id=id).order_by(Usuario.rol, Usuario.nombre).all()
+    ultima, nventas, nprod, nusers = _resumen_empresas()
+    return render_template("sg_empresa.html", e=e, estados=ESTADOS_EMPRESA, usuarios=usuarios, f=f,
+                           uso=dict(ultima=ultima.get(id), ventas=nventas.get(id, 0), refs=nprod.get(id, 0)))
+
+
+@app.route("/softgest/<int:id>/entrar", methods=["POST"])
+@sg_requerido
+def sg_entrar(id):
+    e = db.session.get(Empresa, id) or abort(404)
+    session["soporte_empresa"] = e.id
+    flash(f"Estás dentro de «{e.nombre}» como soporte (con permisos de administrador).", "info")
+    return redirect(url_for("inicio"))
+
+
+@app.route("/softgest/salir")
+@sg_requerido
+def sg_salir():
+    session.pop("soporte_empresa", None)
+    return redirect(url_for("sg_panel"))
+
+
 @app.errorhandler(404)
 def no_encontrado(e):
     return render_template("error.html", titulo="No encontrado",
@@ -1944,14 +2293,36 @@ def no_encontrado(e):
 
 # ------------------------------------------------------------- arranque BD
 def migrar_columnas():
-    """Agrega columnas nuevas a tablas que ya existían (create_all no lo hace)."""
+    """Agrega columnas nuevas a tablas que ya existían y pasa una instalación antigua
+    (de una sola empresa) a multiempresa sin perder datos."""
     from sqlalchemy import inspect, text
-    nuevas = []  # (tabla, columna, tipo) para futuras versiones
     insp = inspect(db.engine)
+    tablas = set(insp.get_table_names())
+    nuevas = [("cz_usuarios", "empresa_id", "INTEGER"), ("cz_ventas", "consecutivo", "INTEGER"),
+              ("cz_ajustes", "consecutivo", "INTEGER"), ("cz_nomina", "consecutivo", "INTEGER"),
+              ("cz_negocio", "logo", "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"),
+              ("cz_negocio", "logo_v", "INTEGER NOT NULL DEFAULT 0")]
+    mapeadas = [m.class_ for m in db.Model.registry.mappers if issubclass(m.class_, EmpresaMixin)]
+    nuevas += [(m.__tablename__, "empresa_id", "INTEGER") for m in mapeadas]
     for tabla, col, tipo in nuevas:
-        if col not in {c["name"] for c in insp.get_columns(tabla)}:
+        if tabla in tablas and col not in {c["name"] for c in insp.get_columns(tabla)}:
             with db.engine.begin() as cn:
                 cn.execute(text(f"ALTER TABLE {tabla} ADD COLUMN {col} {tipo}"))
+    # Datos viejos sin empresa → empresa «Mi empresa»
+    with db.engine.begin() as cn:
+        huerfanos = cn.execute(text("SELECT COUNT(*) FROM cz_usuarios WHERE empresa_id IS NULL "
+                                    "AND rol <> 'superadmin'")).scalar()
+        if huerfanos:
+            nombre = cn.execute(text("SELECT nombre FROM cz_negocio ORDER BY id LIMIT 1")).scalar() or "Mi empresa"
+            cn.execute(text("INSERT INTO cz_empresas (nombre, slug, estado, demo_cargando, creado) "
+                            "VALUES (:n, 'empresa1', 'activa', FALSE, :c)"), dict(n=nombre, c=ahora()))
+            eid = cn.execute(text("SELECT MAX(id) FROM cz_empresas")).scalar()
+            cn.execute(text("UPDATE cz_usuarios SET empresa_id = :e WHERE empresa_id IS NULL AND rol <> 'superadmin'"),
+                       dict(e=eid))
+            for m in mapeadas:
+                cn.execute(text(f"UPDATE {m.__tablename__} SET empresa_id = :e WHERE empresa_id IS NULL"), dict(e=eid))
+        for t in ("cz_ventas", "cz_ajustes", "cz_nomina"):
+            cn.execute(text(f"UPDATE {t} SET consecutivo = id WHERE consecutivo IS NULL"))
 
 
 def inicializar_bd():
@@ -1967,15 +2338,21 @@ def inicializar_bd():
             print(str(e).split("\n")[0][:300], flush=True)
             print("=" * 70, flush=True)
             raise
-        if not Usuario.query.first():
+        # Usuario SoftGest (superadmin): administra las empresas desde /softgest
+        if not Usuario.query.filter_by(rol="superadmin").first():
             try:
-                admin = Usuario(nombre=os.getenv("ADMIN_NOMBRE", "Administrador"),
-                                username=os.getenv("ADMIN_USER", "admin").lower(), rol="admin")
-                admin.set_password(os.getenv("ADMIN_PASSWORD", "admin123"))
-                db.session.add(admin)
+                user = os.getenv("SUPERADMIN_USER", "softgest").lower()
+                if Usuario.query.filter(func.lower(Usuario.username) == user).first():
+                    user += ".sg"
+                sg = Usuario(nombre="SoftGest", username=user, rol="superadmin")
+                sg.set_password(os.getenv("SUPERADMIN_PASSWORD") or os.getenv("ADMIN_PASSWORD") or "softgest123")
+                db.session.add(sg)
                 db.session.commit()
             except Exception:
                 db.session.rollback()
+        # Las demos que quedaron "cargando" por un reinicio se liberan
+        Empresa.query.filter_by(demo_cargando=True).update({"demo_cargando": False})
+        db.session.commit()
 
 
 inicializar_bd()

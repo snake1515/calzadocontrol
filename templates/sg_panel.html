@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Empresas{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Empresas (SoftGest)</h1><p>Clientes que usan CalzadoControl: demos, activas y suspendidas. Cada una ve solo sus datos.</p></div>
+  <a class="btn" href="{{ url_for('sg_nueva') }}">＋ Nueva empresa / demo</a>
+</div>
+<div class="kpis">
+  <div class="kpi"><div class="lbl">En demo</div><div class="val">{{ cuenta.demo }}</div></div>
+  <div class="kpi hl"><div class="lbl">Activas</div><div class="val">{{ cuenta.activa }}</div></div>
+  <div class="kpi"><div class="lbl">Vencidas sin activar</div><div class="val {{ 'neg' if vencidas }}">{{ vencidas }}</div></div>
+  <div class="kpi"><div class="lbl">Suspendidas</div><div class="val">{{ cuenta.suspendida }}</div></div>
+</div>
+<div class="card">
+  <div class="table-wrap"><table>
+    <thead><tr><th>Empresa</th><th>Estado</th><th>Usuario admin</th><th class="num">Referencias</th><th class="num">Ventas</th><th>Última venta</th><th></th></tr></thead>
+    <tbody>
+    {% for e in empresas %}{% set st = e.estado_txt %}
+      <tr>
+        <td><a href="{{ url_for('sg_empresa', id=e.id) }}"><b>{{ e.nombre }}</b></a><br><small class="muted">{{ e.contacto or '' }}{% if e.telefono %} · {{ e.telefono }}{% endif %} · creada {{ e.creado|fecha }}</small></td>
+        <td><span class="badge {{ st[1] }}">{{ st[0] }}</span>{% if e.demo_cargando %}<br><span class="badge gray">Cargando datos demo…</span>{% endif %}</td>
+        <td><code>{{ admins[e.id].username if e.id in admins else '—' }}</code><br><small class="muted">{{ nusers.get(e.id, 0) }} usuario(s)</small></td>
+        <td class="num">{{ nprod.get(e.id, 0) }}</td>
+        <td class="num">{{ nventas.get(e.id, 0) }}</td>
+        <td>{{ ultima[e.id]|fecha if ultima.get(e.id) else '—' }}</td>
+        <td class="r" style="white-space:nowrap">
+          <a class="btn sec sm" href="{{ url_for('sg_empresa', id=e.id) }}">Gestionar</a>
+          <form method="post" action="{{ url_for('sg_entrar', id=e.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn sm">Entrar</button></form>
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="empty">Aún no hay empresas. Crea la primera demo para un cliente.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <p class="hint" style="margin-top:10px"><b>Entrar</b> te lleva dentro de la empresa como administrador para darle soporte o mostrarle la app. Para salir usa «Volver al panel».</p>
+</div>
+{% endblock %}

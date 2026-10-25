@@ -52,7 +52,7 @@
         <tbody>{% for m in p.mano_obra %}
           <tr><td>{{ m.proceso }}</td><td>{% if m.empleado %}{% if puede('admin') %}<a href="{{ url_for('empleado_detalle', id=m.empleado_id) }}">{{ m.quien }}</a>{% else %}{{ m.quien }}{% endif %}{% else %}{{ m.quien }}{% endif %}</td>
             <td><small>{{ m.detalle }}</small></td><td class="num">{{ m.total|cop }}</td>
-            <td>{% if m.nomina_id %}<span class="badge ok">Pagado NM-{{ '%05d'|format(m.nomina_id) }}</span>{% elif m.empleado %}<span class="badge warn">Por pagar</span>{% endif %}</td></tr>
+            <td>{% if m.nomina_id %}<span class="badge ok">Pagado {{ m.nomina.numero if m.nomina else '' }}</span>{% elif m.empleado %}<span class="badge warn">Por pagar</span>{% endif %}</td></tr>
         {% else %}<tr><td colspan="5" class="empty">Sin mano de obra registrada en este lote.</td></tr>{% endfor %}</tbody>
         <tfoot><tr><td colspan="3">Total mano de obra</td><td class="num">{{ p.costo_mano_obra|cop }}</td><td></td></tr></tfoot>
       </table></div>

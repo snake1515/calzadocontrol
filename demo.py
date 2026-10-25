@@ -1,38 +1,41 @@
-"""Carga datos de ejemplo de una fábrica de calzado (60 días de operación).
+"""Datos de ejemplo de una fábrica de calzado (60 días de operación) para una empresa.
 
-Uso:  python seed_demo.py
-Solo úsalo en una base de datos vacía o de pruebas.
+Se usa desde el panel SoftGest al crear una demo, o por consola:
+    python demo.py "Nombre de la empresa"
 """
 import random
 from datetime import date, datetime, timedelta
 
-from app import app
 from models import (Activo, Cliente, Configuracion, DatosNegocio, Empleado, Gasto, Insumo, PrepRecetaItem,
-                    ProcesoTarifa, Producto, RecetaItem, Usuario, Venta, ahora, db)
+                    ProcesoTarifa, Producto, RecetaItem, Usuario, Venta, ahora, db, empresa_id_actual)
 import nomina as nom
 from services import (ErrorNegocio, registrar_abono, registrar_compra, registrar_preparacion,
                       registrar_produccion, registrar_venta)
 
-random.seed(11)
 DIAS = 60
 
-with app.app_context():
-    if Producto.query.first():
-        raise SystemExit("La base ya tiene datos. El demo solo se carga en una base vacía.")
 
+def cargar(empresa, admin):
+    """Carga 60 días de operación en la empresa activa (set_empresa ya hecho). Devuelve los usuarios demo."""
+    assert empresa_id_actual() == empresa.id
+    if Producto.query.first():
+        raise ErrorNegocio("Esta empresa ya tiene referencias. Vacía los datos antes de cargar la demo.")
+    random.seed(11 + empresa.id)
     neg = DatosNegocio.actual()
-    neg.nombre, neg.ciudad, neg.telefono = "Calzado Demo", "Cúcuta", "300 000 0000"
-    neg.direccion, neg.nit = "Av. 7 # 10-20, barrio La Libertad", "900.000.000-0"
-    admin = Usuario.query.filter_by(rol="admin").first()
-    for nombre, user, rol in (("Marta (producción)", "marta", "produccion"),
-                              ("Julián (ventas)", "julian", "vendedor")):
-        if not Usuario.query.filter_by(username=user).first():
-            u = Usuario(nombre=nombre, username=user, rol=rol)
+    neg.ciudad = neg.ciudad or "Cúcuta"
+    neg.telefono = neg.telefono or empresa.telefono
+    usuarios = []
+    for nombre, sufijo, rol in (("Marta (producción)", "produccion", "produccion"),
+                                ("Julián (ventas)", "ventas", "vendedor")):
+        user = f"{empresa.slug}.{sufijo}"
+        u = Usuario.query.filter_by(username=user).first()
+        if not u:
+            u = Usuario(nombre=nombre, username=user, rol=rol, empresa_id=empresa.id)
             u.set_password("demo123")
             db.session.add(u)
+        usuarios.append(u)
     db.session.commit()
-    marta = Usuario.query.filter_by(username="marta").first()
-    julian = Usuario.query.filter_by(username="julian").first()
+    marta, julian = usuarios
     inicio = ahora().replace(hour=8, minute=0) - timedelta(days=DIAS)
 
     # nombre, categoría, unidad, mínimo, cantidad comprada, costo total, proveedor
@@ -292,5 +295,15 @@ with app.app_context():
         db.session.commit()
         q_ini = q_fin + timedelta(days=1)
 
-    print("Datos de ejemplo cargados: 21 materiales, 5 referencias, 7 empleados, 8 clientes, "
-          f"{DIAS} días de producción, ventas, cartera, gastos y nómina. Usuarios demo: marta / julian (clave demo123).")
+    return marta.username, julian.username
+
+
+if __name__ == "__main__":
+    import sys
+    from app import app, crear_empresa
+    from models import set_empresa
+    with app.app_context():
+        nombre = sys.argv[1] if len(sys.argv) > 1 else "Calzado Demo"
+        emp, adm = crear_empresa(nombre, "demo", 15, None, "admin123")
+        set_empresa(emp.id)
+        print("Empresa", emp.nombre, "· admin:", adm.username, "/ admin123 · usuarios demo:", cargar(emp, adm))

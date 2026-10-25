@@ -1,6 +1,6 @@
 # CalzadoControl
 
-App web para **fábricas y talleres de calzado**: materiales, producción por tallas y procesos, nómina por destajo, ventas con recibo, cartera a crédito y reportes. Hecha por SoftGest sobre la base de VikingoControl.
+App web **multiempresa** para **fábricas y talleres de calzado**: materiales, producción por tallas y procesos, nómina por destajo, ventas con recibo, cartera a crédito y reportes. Hecha por SoftGest sobre la base de VikingoControl.
 
 ## Módulos
 
@@ -27,16 +27,37 @@ App web para **fábricas y talleres de calzado**: materiales, producción por ta
 3. Cada venta guarda ese costo → ganancia bruta = venta neta (sin IVA) − costo.
 4. Ganancia neta = bruta − nómina (sueldos, aportes y prestaciones; el destajo ya va en el costo del par) − gastos − pérdidas − depreciación.
 
-> Los recibos son soporte de la venta; **no reemplazan la factura electrónica DIAN**. La nómina es una ayuda de control; la planilla PILA y la liquidación legal las valida el contador.
+> Los recibos son soporte de la venta; **no reemplazan la factura electrónica DIAN**. La nómina es una ayuda de control; la planilla PILA y la liquidación legal las vali## Multiempresa y demos (panel SoftGest)
+
+- Un solo despliegue atiende a todas las empresas. Cada empresa ve **solo sus datos** (filtro automático por `empresa_id` en todas las consultas) y tiene su propia numeración, logo, usuarios y configuración.
+- El usuario **SoftGest** (`SUPERADMIN_USER`) entra a `/softgest` y desde ahí:
+  - crea empresas en **demo** (15 días por defecto) o **activas**, con su usuario administrador;
+  - carga **datos de ejemplo** (60 días de una fábrica) para mostrar la app;
+  - **extiende** la demo, la **activa** sin vencimiento (pago único) o la **suspende**;
+  - **entra como soporte** a cualquier empresa;
+  - **vacía** los datos de una empresa para que arranque limpia al comprar.
+- Durante la demo, la app muestra arriba **los días que quedan** (ámbar a 5 días, rojo a 2) con botón para activar por WhatsApp. Al vencer, **se bloquea** el ingreso y se muestra cómo activar; **los datos se conservan**.
 
 ## Desplegar en Render + Supabase
 
-1. **Supabase** → proyecto → *Project Settings → Database → Connection string → URI* (Session pooler, puerto 5432), con la contraseña real.
-2. **Render** → *New → Blueprint* → elige este repo (lee `render.yaml`).
-3. Variables: `DATABASE_URL` (Supabase) y `ADMIN_PASSWORD`. `SECRET_KEY` se genera sola.
-4. Al arrancar se crean las tablas (prefijo `cz_`, conviven con otras apps en la misma base) y el usuario `admin`.
+1. **Supabase** → *Connect* → **Session pooler** (puerto 5432), con la contraseña real. Puede ser la misma base de otras apps: las tablas usan el prefijo `cz_`.
+2. **Render** → *New → Web Service* con este repo:
+   - Build: `pip install -r requirements.txt`
+   - Start: `gunicorn app:app --workers 2 --threads 4 --timeout 60`
+3. Variables de entorno:
+   - `DATABASE_URL` → la de Supabase
+   - `SECRET_KEY` → texto largo aleatorio
+   - `SUPERADMIN_USER` → `softgest` (usuario del panel)
+   - `SUPERADMIN_PASSWORD` → clave del panel
+   - `SOFTGEST_WHATSAPP` → tu número con 57 (ej. `573001234567`), para el botón «Activar»
+   - `PYTHON_VERSION` → `3.12.4`
+4. Entra con el usuario SoftGest → *Nueva empresa / demo*.
 
-Datos de prueba (solo con la base vacía): Render → *Shell* → `python seed_demo.py` → 21 materiales, 5 referencias, 7 empleados, 8 clientes y 60 días de producción, ventas, cartera, gastos y nómina. Usuarios `marta` (producción) y `julian` (vendedor), clave `demo123`.
+Si ya existía una instalación de una sola empresa, al arrancar se convierte sola en la empresa «Mi empresa» sin perder datos.
+
+Por consola (opcional): `python demo.py "Nombre"` crea una empresa demo con datos de ejemplo.
+
+lave `demo123`.
 
 ## Estructura
 
@@ -47,6 +68,6 @@ services.py       compras, producción por tallas, ventas, abonos, devoluciones,
 nomina.py         liquidación de nómina
 comprobantes.py   recibo PDF/JPG, egreso y desprendible de nómina
 reportes.py       reportes y Excel
-seed_demo.py      datos de ejemplo
+demo.py           datos de ejemplo por empresa
 templates/ static/
 ```

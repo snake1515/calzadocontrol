@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ e.nombre if e else 'Nueva empresa' }}{% endblock %}
+{% block content %}
+{% if not e %}
+<div class="page-head"><div><h1>Nueva empresa</h1><p>Crea el acceso para un cliente: su empresa, su usuario administrador y, si quieres, datos de ejemplo para la demo.</p></div>
+  <a class="btn sec" href="{{ url_for('sg_panel') }}">← Empresas</a></div>
+<form method="post" class="card" style="max-width:760px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="form-row">
+    <div class="field"><label>Nombre de la empresa</label><input class="input" name="nombre" id="nom" value="{{ f.nombre }}" placeholder="Ej: Calzado Laura" required></div>
+    <div class="field"><label>Persona de contacto</label><input class="input" name="contacto" value="{{ f.contacto }}" placeholder="Ej: Laura Pérez"></div>
+    <div class="field"><label>Teléfono / WhatsApp</label><input class="input" name="telefono" value="{{ f.telefono }}"></div>
+  </div>
+  <div class="form-row">
+    <div class="field"><label>Tipo de acceso</label><select class="input" name="estado" id="estado">
+      <option value="demo" {{ 'selected' if f.estado != 'activa' }}>Demo gratis</option><option value="activa" {{ 'selected' if f.estado == 'activa' }}>Activa (cliente que ya pagó)</option></select></div>
+    <div class="field" id="diasBox"><label>Días de la demo</label><input class="input" type="number" min="1" step="1" name="dias" value="{{ f.dias or 15 }}"></div>
+  </div>
+  <div class="form-row">
+    <div class="field"><label>Usuario del administrador</label><input class="input" name="admin_user" id="usr" value="{{ f.admin_user }}" placeholder="Ej: laura.admin" required autocomplete="off"><div class="hint">Sin espacios. Con este usuario entra el cliente.</div></div>
+    <div class="field"><label>Contraseña inicial</label><input class="input" name="admin_password" value="{{ f.admin_password }}" placeholder="Mínimo 6 caracteres" required autocomplete="off"><div class="hint">El cliente la puede cambiar en «Mi cuenta».</div></div>
+  </div>
+  <label class="check" style="margin-bottom:6px"><input type="checkbox" name="cargar_demo" value="1" {{ 'checked' if not f or f.cargar_demo }}> <span>Cargar <b>datos de ejemplo</b> (60 días de una fábrica: referencias con tallas, producción, ventas, cartera, nómina)</span></label>
+  <div class="hint" style="margin:0 0 14px 24px">Ideal para mostrar la app. Cuando el cliente compre, desde «Gestionar» vacías los datos y arranca limpio.</div>
+  <div class="field"><label>Nota interna</label><input class="input" name="nota" value="{{ f.nota }}" placeholder="Ej: lo contacté por la campaña de Facebook"></div>
+  <div class="actions"><button class="btn">Crear empresa</button><a class="btn sec" href="{{ url_for('sg_panel') }}">Cancelar</a></div>
+</form>
+{% else %}
+{% set st = e.estado_txt %}
+<div class="page-head"><div><h1>{{ e.nombre }} <span class="badge {{ st[1] }}">{{ st[0] }}</span></h1>
+  <p>Creada {{ e.creado|fecha }} · código <code>{{ e.slug }}</code> · {{ uso.refs }} referencias · {{ uso.ventas }} ventas{% if uso.ultima %} · última venta {{ uso.ultima|fecha }}{% endif %}{% if e.demo_cargando %} · <b>cargando datos demo…</b>{% endif %}</p></div>
+  <div class="actions"><a class="btn sec" href="{{ url_for('sg_panel') }}">← Empresas</a>
+    <form method="post" action="{{ url_for('sg_entrar', id=e.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn">Entrar como soporte</button></form></div></div>
+<div class="grid g-main">
+  <div>
+    <form method="post" class="card">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="guardar">
+      <div class="card-head"><h2>Datos y plan</h2></div>
+      <div class="form-row">
+        <div class="field"><label>Nombre</label><input class="input" name="nombre" value="{{ e.nombre }}"></div>
+        <div class="field"><label>Contacto</label><input class="input" name="contacto" value="{{ e.contacto or '' }}"></div>
+        <div class="field"><label>Teléfono</label><input class="input" name="telefono" value="{{ e.telefono or '' }}"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Estado</label><select class="input" name="estado">{% for k, v in estados.items() %}<option value="{{ k }}" {{ 'selected' if k == e.estado }}>{{ v }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Vence</label><input class="input" type="date" name="vence" value="{{ e.vence.isoformat() if e.vence else '' }}"><div class="hint">Vacío = sin vencimiento</div></div>
+      </div>
+      <div class="field"><label>Nota interna</label><input class="input" name="nota" value="{{ e.nota or '' }}"></div>
+      <button class="btn">Guardar</button>
+    </form>
+    <div class="card">
+      <div class="card-head"><h2>Usuarios</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th></tr></thead>
+        <tbody>{% for u in usuarios %}<tr><td>{{ u.nombre }}</td><td><code>{{ u.username }}</code></td><td>{{ u.rol_nombre }}</td><td>{{ 'Activo' if u.activo else 'Inactivo' }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      <form method="post" style="margin-top:12px;background:var(--bg);border-radius:10px;padding:12px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="clave">
+        <div class="form-row">
+          <div class="field"><label>Restablecer clave de</label><select class="input" name="usuario_id">{% for u in usuarios %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}</select></div>
+          <div class="field"><label>Nueva clave</label><input class="input" name="nueva_clave" placeholder="Mínimo 6 caracteres" autocomplete="off"></div>
+        </div>
+        <button class="btn sec sm">Cambiar clave</button>
+      </form>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <div class="card-head"><h2>Acciones rápidas</h2></div>
+      {% for accion, txt, cls in [('extender:7', 'Extender 7 días', 'sec'), ('extender:15', 'Extender 15 días', 'sec'), ('extender:30', 'Extender 30 días', 'sec'), ('activar', '✔ Activar sin vencimiento (pagó)', ''), ('suspender', 'Suspender acceso', 'danger')] %}
+      <form method="post" style="margin-bottom:8px" {% if accion == 'suspender' %}onsubmit="return confirm('¿Suspender? Sus usuarios no podrán entrar; los datos se conservan.')"{% endif %}>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="{{ accion }}">
+        <button class="btn {{ cls }} block">{{ txt }}</button></form>
+      {% endfor %}
+      <p class="hint">Extender cuenta desde hoy o desde el vencimiento actual, lo que sea mayor. Si estaba suspendida, vuelve a demo.</p>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Datos</h2></div>
+      <form method="post" style="margin-bottom:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="demo">
+        <button class="btn sec block" {{ 'disabled' if e.demo_cargando or uso.refs }}>Cargar datos de ejemplo</button>
+        <div class="hint">Solo si la empresa está vacía.</div></form>
+      <form method="post" onsubmit="return confirm('Se borrarán TODAS las ventas, producción, referencias, materiales, clientes, empleados, nómina y gastos de esta empresa. ¿Seguro?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="vaciar">
+        <div class="field"><label>Vaciar datos (para arrancar en limpio)</label><input class="input" name="confirmar" placeholder="Escribe: {{ e.nombre }}" autocomplete="off"></div>
+        <button class="btn danger block">Vaciar datos de la empresa</button>
+        <div class="hint">Conserva usuarios, logo y datos del negocio. Borra los usuarios de la demo (.produccion / .ventas).</div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  const est = document.getElementById('estado');
+  if (est) {
+    const ui = () => document.getElementById('diasBox').style.display = est.value === 'demo' ? '' : 'none';
+    est.addEventListener('change', ui); ui();
+    const nom = document.getElementById('nom'), usr = document.getElementById('usr');
+    nom.addEventListener('input', () => { if (!usr.dataset.edit) usr.value = nom.value.normalize('NFD').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 20) + (nom.value ? '.admin' : ''); });
+    usr.addEventListener('input', () => usr.dataset.edit = 1);
+  }
+</script>
+{% endblock %}

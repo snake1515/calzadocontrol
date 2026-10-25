@@ -12,9 +12,11 @@ services:
         generateValue: true
       - key: DATABASE_URL
         sync: false
-      - key: ADMIN_USER
-        value: admin
-      - key: ADMIN_PASSWORD
+      - key: SUPERADMIN_USER
+        value: softgest
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+      - key: SOFTGEST_WHATSAPP
         sync: false
       - key: NOMBRE_NEGOCIO
         value: CalzadoControl

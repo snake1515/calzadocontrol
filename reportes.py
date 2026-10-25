@@ -302,7 +302,7 @@ def excel(rep, desde, hasta, agrupar, negocio, prefijo="CZ"):
         w3.cell(row=fila_aj, column=1, value=a.fecha.date()).number_format = "DD/MM/YYYY"
         w3.cell(row=fila_aj, column=2, value="Pérdidas de inventario")
         det = ", ".join(f"{it.cantidad:g} {it.unidad} {it.nombre}" for it in a.items)
-        w3.cell(row=fila_aj, column=3, value=f"EG-{a.id:06d} · {a.motivo}: {det}"[:250])
+        w3.cell(row=fila_aj, column=3, value=f"{a.numero} · {a.motivo}: {det}"[:250])
         w3.cell(row=fila_aj, column=4, value=round(a.total, 2)).number_format = FMT_COP
         fila_aj += 1
     _anchos(w3, [24, 22, 40, 16])
@@ -344,7 +344,7 @@ def excel(rep, desde, hasta, agrupar, negocio, prefijo="CZ"):
               .order_by(Venta.fecha).all()):
         for it in v.items:
             w5.cell(row=i, column=1, value=v.fecha.date()).number_format = "DD/MM/YYYY"
-            w5.cell(row=i, column=2, value=f"{prefijo}-{v.id:06d}")
+            w5.cell(row=i, column=2, value=f"{prefijo}-{(v.consecutivo or v.id):06d}")
             w5.cell(row=i, column=3, value=v.cliente or "")
             w5.cell(row=i, column=4, value="Crédito" if v.condicion == "credito" else (v.metodo_pago or ""))
             w5.cell(row=i, column=5, value=it.producto.etiqueta)
@@ -380,7 +380,7 @@ def excel(rep, desde, hasta, agrupar, negocio, prefijo="CZ"):
     pend = [v for v in Venta.query.filter(Venta.anulada.is_(False), Venta.condicion == "credito")
             .order_by(Venta.vence).all() if v.saldo > 0.5]
     for i, v in enumerate(pend, 2):
-        w7.cell(row=i, column=1, value=f"{prefijo}-{v.id:06d}")
+        w7.cell(row=i, column=1, value=f"{prefijo}-{(v.consecutivo or v.id):06d}")
         w7.cell(row=i, column=2, value=v.fecha.date()).number_format = "DD/MM/YYYY"
         w7.cell(row=i, column=3, value=v.cliente or "")
         w7.cell(row=i, column=4, value=v.vence).number_format = "DD/MM/YYYY"

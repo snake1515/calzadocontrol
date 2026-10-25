@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acceso pausado · CalzadoControl</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800&family=Nunito+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=STATIC_V) }}">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card" style="max-width:460px">
+    <div class="card" style="text-align:center;padding:28px 24px">
+      <img src="{{ url_for('logo', v=LOGO_V) }}" alt="" style="width:84px;height:84px;border-radius:18px;object-fit:cover;margin-bottom:12px">
+      {% if emp.estado == 'suspendida' %}
+        <h1 style="font-size:1.4rem">El acceso de {{ emp.nombre }} está suspendido</h1>
+        <p class="muted">Comunícate con SoftGest para reactivarlo.</p>
+      {% elif emp.estado == 'demo' %}
+        <h1 style="font-size:1.4rem">Tu demo de CalzadoControl terminó</h1>
+        <p class="muted">La prueba gratis de <b>{{ emp.nombre }}</b> venció el {{ emp.vence.strftime('%d/%m/%Y') }}.</p>
+      {% else %}
+        <h1 style="font-size:1.4rem">Tu plan venció</h1>
+        <p class="muted">El acceso de <b>{{ emp.nombre }}</b> venció el {{ emp.vence.strftime('%d/%m/%Y') }}.</p>
+      {% endif %}
+      <div class="note" style="text-align:left;margin:16px 0">✔ <b>Tus datos están guardados</b>: referencias, producción, ventas, clientes, cartera y nómina. Al activar la app sigues trabajando donde quedaste.</div>
+      {% if wa %}<a class="btn block" href="{{ wa }}" target="_blank" style="margin-bottom:8px">💬 Activar por WhatsApp con SoftGest</a>{% endif %}
+      <a class="btn sec block" href="{{ url_for('logout') }}">Salir</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

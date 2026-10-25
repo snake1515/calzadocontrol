@@ -4,8 +4,14 @@
 <div class="page-head"><div><h1>Datos del negocio</h1><p>Lo que aparece en el encabezado de cada recibo de venta, egreso y desprendible de nómina.</p></div></div>
 <div class="grid g-main">
   <div class="card">
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field"><label>Logo</label>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <img src="{{ url_for('logo', v=neg.logo_v) }}" alt="Logo" style="width:72px;height:72px;object-fit:cover;border-radius:12px;border:1px solid var(--line)">
+          <div style="flex:1;min-width:200px"><input class="input" type="file" name="logo" accept="image/png,image/jpeg,image/webp">
+            <div class="hint">JPG o PNG. Sale en el menú y en recibos, egresos y desprendibles.{% if neg.logo %} <label class="check" style="display:inline-flex;margin:0 0 0 8px;font-weight:600"><input type="checkbox" name="quitar_logo" value="1"> Quitar logo</label>{% endif %}</div></div>
+        </div></div>
       <div class="field"><label>Nombre del negocio</label><input class="input" name="nombre" value="{{ neg.nombre or '' }}" required></div>
       <div class="form-row">
         <div class="field"><label>NIT o cédula</label><input class="input" name="nit" value="{{ neg.nit or '' }}" placeholder="Opcional"></div>

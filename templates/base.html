@@ -10,6 +10,11 @@
   <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}">
   <style>
     .sidebar { overflow-y: auto; }
+    .plan-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 10px 14px 14px; border-radius: 10px; margin-bottom: 14px; position: relative; overflow: hidden; background: var(--accent-soft); color: #6b3a17; border: 1px solid #ecd2bd; font-size: .92rem; }
+    .plan-bar.warn { background: var(--warn-soft); color: #7a5214; border-color: #f0dbb0; }
+    .plan-bar.err { background: var(--err-soft); color: var(--err); border-color: #f2c2c2; }
+    .plan-bar .plan-prog { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0,0,0,.06); }
+    .plan-bar .plan-prog span { display: block; height: 100%; background: currentColor; opacity: .55; }
     .nav a { padding: 7px 12px; }
     #carga { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: var(--accent); z-index: 100; transition: width .3s ease; box-shadow: 0 0 8px var(--accent); }
     #carga.on { width: 70%; transition: width 4s cubic-bezier(.1,.7,.2,1); }
@@ -26,13 +31,18 @@
 <input type="checkbox" id="menu-toggle">
 <label for="menu-toggle" class="overlay" aria-hidden="true"></label>
 <header class="topbar">
-  <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_sm.jpg', v=STATIC_V) }}" alt=""><div><b>{{ NOMBRE_NEGOCIO }}</b></div></div>
+  <div class="brand"><img class="brand-logo" src="{{ url_for('logo', v=LOGO_V) }}" alt=""><div><b>{{ NOMBRE_NEGOCIO }}</b></div></div>
   <label for="menu-toggle" aria-label="Abrir menú">☰</label>
 </header>
 <div class="layout">
   <aside class="sidebar">
-    <div class="brand"><img class="brand-logo" src="{{ url_for('static', filename='logo_sm.jpg', v=STATIC_V) }}" alt=""><div><b>{{ NOMBRE_NEGOCIO }}</b><small>Fábrica de calzado</small></div></div>
+    <div class="brand"><img class="brand-logo" src="{{ url_for('logo', v=LOGO_V) }}" alt=""><div><b>{{ NOMBRE_NEGOCIO }}</b><small>Fábrica de calzado</small></div></div>
     <nav class="nav">
+      {% if current_user.rol == 'superadmin' %}
+      <a href="{{ url_for('sg_panel') }}" class="{{ 'on' if ep.startswith('sg_') }}"><span class="ico">★</span>Empresas (SoftGest)</a>
+      {% if SOPORTE %}<div class="nav-sep"></div>{% endif %}
+      {% endif %}
+      {% if EMPRESA %}
       {% if puede('admin') %}
       <a href="{{ url_for('inicio') }}" class="{{ 'on' if ep == 'inicio' }}"><span class="ico">◧</span>Resumen</a>
       <a href="{{ url_for('reportes') }}" class="{{ 'on' if ep.startswith('reportes') }}"><span class="ico">▦</span>Reportes</a>
@@ -65,6 +75,7 @@
       <a href="{{ url_for('negocio') }}" class="{{ 'on' if ep == 'negocio' }}"><span class="ico">⌂</span>Datos del negocio</a>
       <a href="{{ url_for('configuracion') }}" class="{{ 'on' if ep == 'configuracion' }}"><span class="ico">⚙</span>Configuración</a>
       {% endif %}
+      {% endif %}
     </nav>
     <div class="me">
       <b>{{ current_user.nombre }}</b>
@@ -74,6 +85,14 @@
     </div>
   </aside>
   <main class="main">
+    {% if SOPORTE %}<div class="flash info" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><span>🛠 Soporte SoftGest: estás dentro de <b>{{ EMPRESA.nombre }}</b>.</span><a class="btn sec sm" href="{{ url_for('sg_salir') }}">← Volver al panel</a></div>{% endif %}
+    {% if aviso_plan %}
+    <div class="plan-bar {{ aviso_plan.nivel }}">
+      <div class="plan-txt">⏳ {{ aviso_plan.texto|safe }}{% if aviso_plan.dias is not none and aviso_plan.dias <= 5 %} Al terminar, la app se bloquea hasta activarla; <b>tus datos no se pierden</b>.{% endif %}</div>
+      {% if wa_activar %}<a class="btn sm" href="{{ wa_activar }}" target="_blank">Activar por WhatsApp</a>{% endif %}
+      <div class="plan-prog"><span style="width:{{ aviso_plan.pct|round(1) }}%"></span></div>
+    </div>
+    {% endif %}
     {% with msgs = get_flashed_messages(with_categories=true) %}
       {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
     {% endwith %}

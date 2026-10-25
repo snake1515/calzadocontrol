@@ -2,7 +2,7 @@
 {% block title %}Ventas{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div><h1>{{ 'Mis ventas' if current_user.rol == 'vendedor' else 'Ventas' }}</h1><p>Del {{ desde }} al {{ hasta }}</p></div>
+  <div><h1>{{ 'Mis ventas' if current_user.rol_efectivo == 'vendedor' else 'Ventas' }}</h1><p>Del {{ desde }} al {{ hasta }}</p></div>
   <div class="actions">
     <form class="filters" method="get">
       <div class="field"><label>Desde</label><input class="input" type="date" name="desde" value="{{ desde }}"></div>
@@ -25,12 +25,12 @@
     <tbody>
     {% for v in items %}{% set est = v.estado_pago %}
       <tr class="{{ 'anulada' if v.anulada }}">
-        <td><a href="{{ url_for('venta_detalle', id=v.id) }}">{{ num_doc(v) }}</a></td>
-        <td>{{ v.fecha|fecha }}</td>
+        <td style="white-space:nowrap"><a href="{{ url_for('venta_detalle', id=v.id) }}">{{ num_doc(v) }}</a></td>
+        <td style="white-space:nowrap">{{ v.fecha|fecha }}</td>
         <td>{{ v.cliente or '—' }}</td>
-        <td><small>{{ v.unidades }} pares · {% for it in v.items[:3] %}{{ it.producto.nombre }} T{{ it.talla }}×{{ it.cantidad }}{{ ', ' if not loop.last }}{% endfor %}{{ '…' if v.items|length > 3 }}</small></td>
+        <td style="min-width:240px"><small>{{ v.unidades }} pares · {% for it in v.items[:3] %}{{ it.producto.nombre }} T{{ it.talla }}×{{ it.cantidad }}{{ ', ' if not loop.last }}{% endfor %}{{ '…' if v.items|length > 3 }}</small></td>
         <td><span class="badge {{ est[1] }}">{{ est[0] }}</span><br><small>{{ 'Crédito' if v.condicion == 'credito' else v.metodo_pago }}</small></td>
-        {% if puede('admin') %}<td>{{ v.usuario.nombre if v.usuario else '' }}</td>{% endif %}
+        {% if puede('admin') %}<td style="white-space:nowrap">{{ v.usuario.nombre if v.usuario else '' }}</td>{% endif %}
         <td class="num"><b>{{ v.total_factura|cop }}</b></td>
         <td class="num {{ 'neg' if v.saldo > 0.5 }}">{{ v.saldo|cop if v.saldo > 0.5 else '—' }}</td>
         {% if puede('admin') %}<td class="num {{ 'pos' if v.ganancia >= 0 else 'neg' }}">{{ v.ganancia|cop }}</td>{% endif %}

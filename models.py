@@ -3,15 +3,67 @@
 Todas las tablas usan el prefijo cz_ para poder convivir con otras apps
 en la misma base de datos de Supabase.
 """
+import contextvars
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import event, func
+from sqlalchemy.orm import Session, declared_attr, with_loader_criteria
 from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
 TZ = ZoneInfo("America/Bogota")
+
+# ------------------------------------------------------------ multiempresa
+# Cada fila de negocio pertenece a una empresa (empresa_id). Todas las consultas se
+# filtran solas por la empresa activa y las filas nuevas la reciben al guardarse.
+_empresa_actual = contextvars.ContextVar("empresa_actual", default=None)
+
+
+def set_empresa(empresa_id):
+    _empresa_actual.set(empresa_id)
+
+
+def empresa_id_actual():
+    return _empresa_actual.get()
+
+
+class EmpresaMixin:
+    @declared_attr
+    def empresa_id(cls):
+        return db.Column(db.Integer, db.ForeignKey("cz_empresas.id"), index=True)
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _filtrar_por_empresa(st):
+    if (st.is_select and not st.is_column_load and not st.is_relationship_load
+            and not st.execution_options.get("todas_empresas")):
+        eid = _empresa_actual.get()
+        st.statement = st.statement.options(
+            with_loader_criteria(EmpresaMixin, lambda cls: cls.empresa_id == eid, include_aliases=True))
+
+
+@event.listens_for(Session, "before_flush")
+def _asignar_empresa(session, ctx, inst):
+    eid = _empresa_actual.get()
+    siguientes = {}
+    with session.no_autoflush:
+        for obj in session.new:
+            if isinstance(obj, EmpresaMixin) and obj.empresa_id is None:
+                if eid is None:
+                    raise RuntimeError(f"No hay empresa activa para guardar {type(obj).__name__}")
+                obj.empresa_id = eid
+            # Consecutivo propio de cada empresa (ventas, egresos, nómina)
+            if hasattr(type(obj), "consecutivo") and getattr(obj, "consecutivo", 1) is None:
+                cls = type(obj)
+                if cls not in siguientes:
+                    siguientes[cls] = (session.query(func.max(cls.consecutivo))
+                                       .filter(cls.empresa_id == obj.empresa_id)
+                                       .execution_options(todas_empresas=True).scalar() or 0)
+                siguientes[cls] += 1
+                obj.consecutivo = siguientes[cls]
 
 
 def ahora():
@@ -59,9 +111,52 @@ TIPOS_CLIENTE = ["Almacén / tienda", "Distribuidor", "Particular", "Vendedor po
                  "Empresa (dotación)", "Otro"]
 
 
+ESTADOS_EMPRESA = {"demo": "Demo", "activa": "Activa", "suspendida": "Suspendida"}
+
+
+class Empresa(db.Model):
+    """Cliente de SoftGest que usa la app. Sus datos están aislados de los demás."""
+    __tablename__ = "cz_empresas"
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(120), nullable=False)
+    slug = db.Column(db.String(40), unique=True, nullable=False)
+    contacto = db.Column(db.String(120))
+    telefono = db.Column(db.String(40))
+    estado = db.Column(db.String(20), nullable=False, default="demo")
+    vence = db.Column(db.Date)  # fin de la demo o de la suscripción; vacío = sin vencimiento
+    nota = db.Column(db.String(255))
+    demo_cargando = db.Column(db.Boolean, nullable=False, default=False)
+    creado = db.Column(db.DateTime, default=ahora)
+
+    @property
+    def dias_restantes(self):
+        if not self.vence:
+            return None
+        return (self.vence - ahora().date()).days
+
+    @property
+    def bloqueada(self):
+        if self.estado == "suspendida":
+            return True
+        d = self.dias_restantes
+        return d is not None and d < 0
+
+    @property
+    def estado_txt(self):
+        if self.estado == "suspendida":
+            return ("Suspendida", "err")
+        d = self.dias_restantes
+        if d is not None and d < 0:
+            return ("Vencida", "err")
+        if self.estado == "demo":
+            return (f"Demo · {d} día{'s' if d != 1 else ''}" if d is not None else "Demo", "warn" if (d or 0) <= 5 else "")
+        return ("Activa" + (f" · vence {self.vence.strftime('%d/%m/%Y')}" if self.vence else ""), "ok")
+
+
 class Usuario(UserMixin, db.Model):
     __tablename__ = "cz_usuarios"
     id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey("cz_empresas.id"), index=True)  # vacío = SoftGest
     nombre = db.Column(db.String(120), nullable=False)
     username = db.Column(db.String(60), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
@@ -79,12 +174,19 @@ class Usuario(UserMixin, db.Model):
     def is_active(self):
         return self.activo
 
+    empresa = db.relationship("Empresa", lazy="joined")
+
     @property
     def rol_nombre(self):
-        return ROLES.get(self.rol, self.rol)
+        return "SoftGest (soporte)" if self.rol == "superadmin" else ROLES.get(self.rol, self.rol)
+
+    @property
+    def rol_efectivo(self):
+        """El superadmin trabaja como administrador cuando entra a una empresa."""
+        return "admin" if self.rol == "superadmin" else self.rol
 
 
-class Configuracion(db.Model):
+class Configuracion(EmpresaMixin, db.Model):
     """Una sola fila: regla de distribución del dinero y parámetros de nómina."""
     __tablename__ = "cz_configuracion"
     id = db.Column(db.Integer, primary_key=True)
@@ -102,15 +204,15 @@ class Configuracion(db.Model):
 
     @classmethod
     def actual(cls):
-        c = db.session.get(cls, 1)
+        c = cls.query.first()
         if not c:
-            c = cls(id=1)
+            c = cls()
             db.session.add(c)
             db.session.commit()
         return c
 
 
-class DatosNegocio(db.Model):
+class DatosNegocio(EmpresaMixin, db.Model):
     """Datos que salen en el encabezado de los recibos y facturas."""
     __tablename__ = "cz_negocio"
     id = db.Column(db.Integer, primary_key=True)
@@ -126,18 +228,21 @@ class DatosNegocio(db.Model):
     iva_pct = db.Column(db.Float, nullable=False, default=0)
     mensaje = db.Column(db.String(200), default="¡Gracias por su compra!")
 
+    logo = db.Column(db.LargeBinary)  # JPG ya redimensionado
+    logo_v = db.Column(db.Integer, nullable=False, default=0)
+
     @classmethod
     def actual(cls):
-        d = db.session.get(cls, 1)
+        d = cls.query.first()
         if not d:
-            d = cls(id=1)
+            d = cls()
             db.session.add(d)
             db.session.commit()
         return d
 
 
 # ------------------------------------------------------------------ insumos
-class Insumo(db.Model):
+class Insumo(EmpresaMixin, db.Model):
     __tablename__ = "cz_insumos"
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(120), nullable=False)
@@ -169,7 +274,7 @@ class Insumo(db.Model):
         return (self.stock_minimo or 0) > 0 and (self.stock or 0) <= self.stock_minimo
 
 
-class CompraInsumo(db.Model):
+class CompraInsumo(EmpresaMixin, db.Model):
     __tablename__ = "cz_compras"
     id = db.Column(db.Integer, primary_key=True)
     fecha = db.Column(db.DateTime, nullable=False, default=ahora, index=True)
@@ -187,7 +292,7 @@ class CompraInsumo(db.Model):
 
 
 # -------------------------------------------------------------- referencias
-class Producto(db.Model):
+class Producto(EmpresaMixin, db.Model):
     """Una referencia de calzado (modelo + color). El stock se lleva por talla."""
     __tablename__ = "cz_productos"
     id = db.Column(db.Integer, primary_key=True)
@@ -293,7 +398,7 @@ class Producto(db.Model):
         return (self.stock_minimo or 0) > 0 and (self.stock or 0) <= self.stock_minimo
 
 
-class ProductoTalla(db.Model):
+class ProductoTalla(EmpresaMixin, db.Model):
     """Existencias de una referencia en una talla."""
     __tablename__ = "cz_producto_tallas"
     id = db.Column(db.Integer, primary_key=True)
@@ -304,7 +409,7 @@ class ProductoTalla(db.Model):
     producto = db.relationship("Producto", back_populates="tallas_stock")
 
 
-class RecetaItem(db.Model):
+class RecetaItem(EmpresaMixin, db.Model):
     """Cantidad de un material que lleva 1 par (ficha técnica de consumo)."""
     __tablename__ = "cz_receta"
     id = db.Column(db.Integer, primary_key=True)
@@ -317,7 +422,7 @@ class RecetaItem(db.Model):
     insumo = db.relationship("Insumo", lazy="joined")
 
 
-class ProcesoTarifa(db.Model):
+class ProcesoTarifa(EmpresaMixin, db.Model):
     """Tarifa de destajo de un proceso para una referencia (ej. Guarnición: $3.500 por par)."""
     __tablename__ = "cz_producto_procesos"
     id = db.Column(db.Integer, primary_key=True)
@@ -329,7 +434,7 @@ class ProcesoTarifa(db.Model):
 
 
 # --------------------------------------------------------------- empleados
-class Empleado(db.Model):
+class Empleado(EmpresaMixin, db.Model):
     __tablename__ = "cz_empleados"
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(120), nullable=False)
@@ -359,7 +464,7 @@ class Empleado(db.Model):
 
 
 # --------------------------------------------------------------- producción
-class Produccion(db.Model):
+class Produccion(EmpresaMixin, db.Model):
     """Lote terminado: materiales + mano de obra por procesos + indirectos -> pares por talla."""
     __tablename__ = "cz_producciones"
     id = db.Column(db.Integer, primary_key=True)
@@ -407,7 +512,7 @@ class Produccion(db.Model):
         return " · ".join(f"{t.talla}×{t.cantidad}" for t in self.tallas if t.cantidad)
 
 
-class ProduccionTalla(db.Model):
+class ProduccionTalla(EmpresaMixin, db.Model):
     """Corrida: cuántos pares salieron de cada talla."""
     __tablename__ = "cz_produccion_tallas"
     id = db.Column(db.Integer, primary_key=True)
@@ -418,7 +523,7 @@ class ProduccionTalla(db.Model):
     produccion = db.relationship("Produccion", back_populates="tallas")
 
 
-class ProduccionConsumo(db.Model):
+class ProduccionConsumo(EmpresaMixin, db.Model):
     __tablename__ = "cz_produccion_consumos"
     id = db.Column(db.Integer, primary_key=True)
     produccion_id = db.Column(db.Integer, db.ForeignKey("cz_producciones.id"), nullable=False)
@@ -431,7 +536,7 @@ class ProduccionConsumo(db.Model):
     insumo = db.relationship("Insumo", lazy="joined")
 
 
-class ProduccionMO(db.Model):
+class ProduccionMO(EmpresaMixin, db.Model):
     """Mano de obra de un proceso dentro de un lote (destajo o valor fijo)."""
     __tablename__ = "cz_produccion_mo"
     id = db.Column(db.Integer, primary_key=True)
@@ -447,6 +552,7 @@ class ProduccionMO(db.Model):
 
     produccion = db.relationship("Produccion", back_populates="mano_obra")
     empleado = db.relationship("Empleado", lazy="joined")
+    nomina = db.relationship("PagoNomina", foreign_keys=[nomina_id], viewonly=True)
 
     @property
     def quien(self):
@@ -462,10 +568,11 @@ class ProduccionMO(db.Model):
 
 
 # ------------------------------------------------------------------ nómina
-class PagoNomina(db.Model):
+class PagoNomina(EmpresaMixin, db.Model):
     """Liquidación de nómina de un empleado para un periodo."""
     __tablename__ = "cz_nomina"
     id = db.Column(db.Integer, primary_key=True)
+    consecutivo = db.Column(db.Integer)
     empleado_id = db.Column(db.Integer, db.ForeignKey("cz_empleados.id"), nullable=False, index=True)
     desde = db.Column(db.Date, nullable=False)
     hasta = db.Column(db.Date, nullable=False)
@@ -496,7 +603,7 @@ class PagoNomina(db.Model):
 
     @property
     def numero(self):
-        return f"NM-{self.id:05d}"
+        return f"NM-{(self.consecutivo or self.id):05d}"
 
     @property
     def devengado(self):
@@ -508,9 +615,10 @@ class PagoNomina(db.Model):
 
 
 # ------------------------------------------------------------------ ventas
-class Venta(db.Model):
+class Venta(EmpresaMixin, db.Model):
     __tablename__ = "cz_ventas"
     id = db.Column(db.Integer, primary_key=True)
+    consecutivo = db.Column(db.Integer)
     fecha = db.Column(db.DateTime, nullable=False, default=ahora, index=True)
     cliente = db.Column(db.String(120))  # nombre tal como quedó en la venta
     cliente_id = db.Column(db.Integer, db.ForeignKey("cz_clientes.id"), index=True)
@@ -577,7 +685,7 @@ class Venta(db.Model):
         return ("Pendiente", "warn")
 
 
-class VentaItem(db.Model):
+class VentaItem(EmpresaMixin, db.Model):
     __tablename__ = "cz_venta_items"
     id = db.Column(db.Integer, primary_key=True)
     venta_id = db.Column(db.Integer, db.ForeignKey("cz_ventas.id"), nullable=False)
@@ -593,7 +701,7 @@ class VentaItem(db.Model):
     producto = db.relationship("Producto", lazy="joined")
 
 
-class Abono(db.Model):
+class Abono(EmpresaMixin, db.Model):
     """Pago parcial o total de una venta a crédito."""
     __tablename__ = "cz_abonos"
     id = db.Column(db.Integer, primary_key=True)
@@ -610,7 +718,7 @@ class Abono(db.Model):
 
 
 # ------------------------------------------------------------------ activos
-class Activo(db.Model):
+class Activo(EmpresaMixin, db.Model):
     """Máquinas y herramientas (guarnecedora, troqueladora, hormas…). Depreciación en línea recta."""
     __tablename__ = "cz_activos"
     id = db.Column(db.Integer, primary_key=True)
@@ -665,7 +773,7 @@ CATEGORIAS_GASTO = ["Arriendo", "Energía eléctrica", "Agua y alcantarillado", 
                     "Impuestos y trámites", "Papelería y aseo", "Otros"]
 
 
-class Gasto(db.Model):
+class Gasto(EmpresaMixin, db.Model):
     """Gastos de la fábrica que no son materiales, nómina ni máquinas: arriendo, servicios…"""
     __tablename__ = "cz_gastos"
     id = db.Column(db.Integer, primary_key=True)
@@ -678,7 +786,7 @@ class Gasto(db.Model):
 
 
 # ----------------------------------------------------------- semielaborados
-class PrepRecetaItem(db.Model):
+class PrepRecetaItem(EmpresaMixin, db.Model):
     """Cuánto de cada insumo lleva 1 unidad de un semielaborado (ej. 1 par de plantillas armadas)."""
     __tablename__ = "cz_prep_receta"
     id = db.Column(db.Integer, primary_key=True)
@@ -691,7 +799,7 @@ class PrepRecetaItem(db.Model):
     componente = db.relationship("Insumo", foreign_keys=[componente_id], lazy="joined")
 
 
-class Preparacion(db.Model):
+class Preparacion(EmpresaMixin, db.Model):
     """Elaboración de un semielaborado propio: insumos → plantillas armadas, cortes, etc."""
     __tablename__ = "cz_preparaciones"
     id = db.Column(db.Integer, primary_key=True)
@@ -714,7 +822,7 @@ class Preparacion(db.Model):
                                cascade="all, delete-orphan")
 
 
-class PreparacionConsumo(db.Model):
+class PreparacionConsumo(EmpresaMixin, db.Model):
     __tablename__ = "cz_preparacion_consumos"
     id = db.Column(db.Integer, primary_key=True)
     preparacion_id = db.Column(db.Integer, db.ForeignKey("cz_preparaciones.id"), nullable=False)
@@ -728,7 +836,7 @@ class PreparacionConsumo(db.Model):
 
 
 # ----------------------------------------------------------------- clientes
-class Cliente(db.Model):
+class Cliente(EmpresaMixin, db.Model):
     __tablename__ = "cz_clientes"
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(120), nullable=False)
@@ -755,7 +863,7 @@ class Cliente(db.Model):
         return f"https://wa.me/{dig}"
 
 
-class Devolucion(db.Model):
+class Devolucion(EmpresaMixin, db.Model):
     """Devolución parcial de una venta (cambio, defecto, el cliente no recibió todo)."""
     __tablename__ = "cz_devoluciones"
     id = db.Column(db.Integer, primary_key=True)
@@ -769,7 +877,7 @@ class Devolucion(db.Model):
     items = db.relationship("DevolucionItem", lazy="selectin", cascade="all, delete-orphan")
 
 
-class DevolucionItem(db.Model):
+class DevolucionItem(EmpresaMixin, db.Model):
     __tablename__ = "cz_devolucion_items"
     id = db.Column(db.Integer, primary_key=True)
     devolucion_id = db.Column(db.Integer, db.ForeignKey("cz_devoluciones.id"), nullable=False)
@@ -784,10 +892,11 @@ MOTIVOS_AJUSTE = ["Ajuste por conteo físico", "Pérdida", "Daño o defecto", "M
                   "Otro"]
 
 
-class Ajuste(db.Model):
+class Ajuste(EmpresaMixin, db.Model):
     """Documento de egreso: saca materiales o pares de la bodega (pérdida, conteo, defecto…)."""
     __tablename__ = "cz_ajustes"
     id = db.Column(db.Integer, primary_key=True)
+    consecutivo = db.Column(db.Integer)
     fecha = db.Column(db.DateTime, nullable=False, default=ahora, index=True)
     motivo = db.Column(db.String(40), nullable=False, default="Pérdida")
     descripcion = db.Column(db.String(255))
@@ -800,10 +909,10 @@ class Ajuste(db.Model):
 
     @property
     def numero(self):
-        return f"EG-{self.id:06d}"
+        return f"EG-{(self.consecutivo or self.id):06d}"
 
 
-class AjusteItem(db.Model):
+class AjusteItem(EmpresaMixin, db.Model):
     __tablename__ = "cz_ajuste_items"
     id = db.Column(db.Integer, primary_key=True)
     ajuste_id = db.Column(db.Integer, db.ForeignKey("cz_ajustes.id"), nullable=False, index=True)
