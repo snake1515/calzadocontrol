@@ -37,7 +37,7 @@ TIPOS_PAGO_TXT = {"destajo": "destajo", "fijo": "fijo", "mixto": "mixto"}
 HOJAS = [
     ("materiales", "Materiales", "Cueros, forros, suelas, pegantes, hilos, empaque… con lo que hay hoy en bodega.", [
         ("Nombre", "nombre", True, "texto", "Ej: Cuero napa negro", None),
-        ("Categoría", "categoria", False, "lista", "Elige de la lista", CATEGORIAS_INSUMO),
+        ("Categoría", "categoria", False, "lista", "Elige una opción", CATEGORIAS_INSUMO),
         ("Unidad", "unidad", True, "lista", "metro cuadrado, par, kilogramo…", UNIDADES),
         ("Costo por unidad", "costo", False, "numero", "Pesos, sin puntos. Ej: 85000", None),
         ("Cantidad en bodega", "cantidad", False, "numero", "Lo que hay hoy. Ej: 12.5", None),
@@ -117,7 +117,7 @@ HOJAS = [
     ]),
     ("gastos", "Gastos", "Opcional: gastos de meses anteriores (arriendo, servicios…).", [
         ("Fecha", "fecha", True, "fecha", "dd/mm/aaaa", None),
-        ("Categoría", "categoria", False, "lista", "Elige de la lista", CATEGORIAS_GASTO),
+        ("Categoría", "categoria", False, "lista", "Elige una opción", CATEGORIAS_GASTO),
         ("Descripción", "descripcion", False, "texto", "Ej: Arriendo bodega marzo", None),
         ("Valor", "valor", True, "numero", "Pesos", None),
     ]),
@@ -253,7 +253,7 @@ def plantilla(ejemplo=False):
             c.font = Font(bold=True, color="FFFFFF")
             c.fill = PatternFill("solid", fgColor=CAFE if req else AZUL)
             c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            h = ws.cell(row=2, column=j, value=f"{MARCA_AYUDA} {ayuda}")
+            h = ws.cell(row=2, column=j, value=f"{MARCA_AYUDA} " + (f"Lista ▾ (desde fila 3): {ayuda}" if ops else ayuda))
             h.font = Font(italic=True, color="7F7F7F", size=9)
             h.fill = PatternFill("solid", fgColor="F3F3F3")
             h.alignment = Alignment(wrap_text=True, vertical="top")
@@ -268,7 +268,8 @@ def plantilla(ejemplo=False):
             ws.column_dimensions[get_column_letter(j)].width = ancho
             if ops:
                 dv = DataValidation(type="list", formula1=rangos[tuple(ops)], allow_blank=True,
-                                    showErrorMessage=False)
+                                    showErrorMessage=False, showInputMessage=True,
+                                    promptTitle=enc[:32], prompt="Haz clic en la flecha ▾ de la celda y elige una opción.")
                 dv.add(f"{get_column_letter(j)}3:{get_column_letter(j)}{MAX_FILAS}")
                 ws.add_data_validation(dv)
         ws.row_dimensions[1].height = 32
