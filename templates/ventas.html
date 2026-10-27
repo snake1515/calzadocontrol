@@ -28,7 +28,7 @@
         <td style="white-space:nowrap"><a href="{{ url_for('venta_detalle', id=v.id) }}">{{ num_doc(v) }}</a></td>
         <td style="white-space:nowrap">{{ v.fecha|fecha }}</td>
         <td>{{ v.cliente or '—' }}</td>
-        <td style="min-width:240px"><small>{{ v.unidades }} pares · {% for it in v.items[:3] %}{{ it.producto.nombre }} T{{ it.talla }}×{{ it.cantidad }}{{ ', ' if not loop.last }}{% endfor %}{{ '…' if v.items|length > 3 }}</small></td>
+        <td style="min-width:240px">{% if v.origen == 'saldo_inicial' %}<span class="badge gray">Saldo anterior</span>{% elif v.origen == 'historica' %}<span class="badge gray">Histórica</span>{% endif %}<small>{{ v.unidades }} pares · {% for it in v.items[:3] %}{{ it.producto.nombre }} T{{ it.talla }}×{{ it.cantidad }}{{ ', ' if not loop.last }}{% endfor %}{{ '…' if v.items|length > 3 }}</small></td>
         <td><span class="badge {{ est[1] }}">{{ est[0] }}</span><br><small>{{ 'Crédito' if v.condicion == 'credito' else v.metodo_pago }}</small></td>
         {% if puede('admin') %}<td style="white-space:nowrap">{{ v.usuario.nombre if v.usuario else '' }}</td>{% endif %}
         <td class="num"><b>{{ v.total_factura|cop }}</b></td>

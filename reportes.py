@@ -10,7 +10,7 @@ from openpyxl.utils import get_column_letter
 from sqlalchemy import func
 
 from activos_calc import activos_vigentes, depreciacion_dia
-from models import (Ajuste, Activo, CompraInsumo, Gasto, PagoNomina, Produccion, Producto, Venta, VentaItem, db)
+from models import (Ajuste, Activo, CompraInsumo, Gasto, PagoNomina, Produccion, Producto, Venta, VentaItem, db, venta_real)
 
 MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 AGRUPACIONES = {"diario": "Por día", "semanal": "Por semana", "mensual": "Por mes"}
@@ -74,7 +74,7 @@ def generar(desde, hasta, agrupar):
         return inicio_bucket(d, agrupar)
 
     # Ventas
-    for v in Venta.query.filter(Venta.anulada.is_(False), Venta.fecha >= ini, Venta.fecha < fin):
+    for v in Venta.query.filter(Venta.anulada.is_(False), venta_real(), Venta.fecha >= ini, Venta.fecha < fin):
         f = filas[b(v.fecha.date())]
         f["ventas"] += v.total
         f["costo_vend"] += v.costo_total
@@ -341,7 +341,7 @@ def excel(rep, desde, hasta, agrupar, negocio, prefijo="CZ"):
     _encabezado(w5, 1, ["Fecha", "Documento", "Cliente", "Condición", "Referencia", "Talla", "Pares",
                         "Precio", "Subtotal", "Costo", "Ganancia"])
     i = 2
-    for v in (Venta.query.filter(Venta.anulada.is_(False), Venta.fecha >= ini, Venta.fecha < fin)
+    for v in (Venta.query.filter(Venta.anulada.is_(False), venta_real(), Venta.fecha >= ini, Venta.fecha < fin)
               .order_by(Venta.fecha).all()):
         for it in v.items:
             w5.cell(row=i, column=1, value=v.fecha.date()).number_format = "DD/MM/YYYY"

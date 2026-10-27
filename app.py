@@ -19,7 +19,8 @@ from models import (ESTADOS_EMPRESA, Empresa, EmpresaMixin, empresa_id_actual, s
                     PROCESOS, ROLES, TIPOS_CLIENTE, TIPOS_PAGO, UNIDADES, Abono, Activo, Ajuste, Cliente,
                     CompraInsumo, Configuracion, DatosNegocio, Devolucion, Empleado, Gasto, Insumo,
                     PagoNomina, Preparacion, PrepRecetaItem, ProcesoTarifa, Produccion, ProduccionMO,
-                    Producto, RecetaItem, Usuario, Venta, VentaItem, ahora, db)
+                    Producto, RecetaItem, Usuario, Venta, VentaItem, ImportLote, ahora, db, venta_real)
+import importador
 import comprobantes
 import demo
 import threading
@@ -448,7 +449,7 @@ def inicio():
         return redirect(url_for("venta_nueva"))
 
     ini, fin, desde, hasta = periodo()
-    ventas = Venta.query.filter(Venta.anulada.is_(False), Venta.fecha >= ini,
+    ventas = Venta.query.filter(Venta.anulada.is_(False), venta_real(), Venta.fecha >= ini,
                                 Venta.fecha < fin).all()
     ingresos = sum(v.total for v in ventas)
     costo_vendido = sum(v.costo_total for v in ventas)
@@ -567,7 +568,7 @@ def inicio():
 def distribucion():
     ini, fin, desde, hasta = periodo()
     cfg = Configuracion.actual()
-    ventas = Venta.query.filter(Venta.anulada.is_(False), Venta.fecha >= ini,
+    ventas = Venta.query.filter(Venta.anulada.is_(False), venta_real(), Venta.fecha >= ini,
                                 Venta.fecha < fin).all()
     por_dia = defaultdict(lambda: {"ventas": 0.0, "costo": 0.0, "num": 0})
     for v in ventas:
@@ -1300,6 +1301,161 @@ def producto_form(id=None):
                            procesos=procs, lista_procesos=PROCESOS, lineas=LINEAS)
 
 
+# ---------------------------------------------------------------- importar
+MAX_IMPORT = 5 * 1024 * 1024
+
+
+def _lote(id):
+    lote = db.session.get(ImportLote, id) or abort(404)
+    return lote
+
+
+@app.route("/importar", methods=["GET", "POST"])
+@rol_requerido("admin")
+def importar():
+    if request.method == "POST":
+        arch = request.files.get("archivo")
+        if not arch or not arch.filename:
+            flash("Elige el archivo de Excel que vas a subir.", "error")
+            return redirect(url_for("importar"))
+        if not arch.filename.lower().endswith((".xlsx", ".xlsm")):
+            flash("El archivo debe ser de Excel (.xlsx). Si es .xls o .csv, ábrelo en Excel y guárdalo "
+                  "como «Libro de Excel (.xlsx)».", "error")
+            return redirect(url_for("importar"))
+        contenido = arch.read(MAX_IMPORT + 1)
+        if len(contenido) > MAX_IMPORT:
+            flash("El archivo pesa más de 5 MB. Quita hojas o imágenes que no sean de la plantilla.", "error")
+            return redirect(url_for("importar"))
+        fecha_saldos = fecha_form(request.form.get("fecha")).date()
+        try:
+            datos, avisos = importador.leer(contenido)
+        except ErrorNegocio as e:
+            for m in e.errores:
+                flash(m, "error")
+            return redirect(url_for("importar"))
+        if not datos:
+            for m in avisos:
+                flash(m, "error")
+            flash("No se encontraron datos. Usa la plantilla y escribe desde la fila 3 de cada hoja.", "error")
+            return redirect(url_for("importar"))
+        # Ensayo completo: se aplica todo y se deshace, para mostrar la revisión real.
+        imp = importador.Importacion(datos, current_user.id, fecha_saldos)
+        try:
+            imp.correr()
+        except Exception as e:  # cualquier sorpresa se muestra como error, nunca se guarda a medias
+            imp.errores.append(("—", "—", f"Error inesperado: {str(e)[:200]}"))
+        db.session.rollback()
+        filas = {k: len(v) for k, v in datos.items()}
+        suma = [k for k in ("existencias", "materiales") if k in imp.res and
+                (imp.res[k].get("pares") or imp.res[k].get("valor_bodega"))]
+        if suma:
+            previo = ImportLote.query.filter_by(estado="aplicado").order_by(ImportLote.id.desc()).first()
+            if previo:
+                avisos.append(f"Ya importaste un archivo el {previo.fecha:%d/%m/%Y} («{previo.archivo_nombre}»). "
+                              "Las cantidades de bodega se SUMAN: si este archivo trae las mismas existencias, "
+                              "quedarían dobles. Si solo querías corregir datos, borra las columnas de cantidades "
+                              "o deshaz primero la importación anterior.")
+        lote = ImportLote(usuario_id=current_user.id, archivo_nombre=arch.filename[:160], archivo=contenido,
+                          fecha_saldos=fecha_saldos, estado="revision",
+                          resumen=importador.a_json(dict(res=imp.res, errores=imp.errores[:500],
+                                                         n_errores=len(imp.errores), avisos=avisos, filas=filas)))
+        db.session.add(lote)
+        db.session.commit()
+        return redirect(url_for("importar_revision", id=lote.id))
+    lotes = ImportLote.query.order_by(ImportLote.id.desc()).limit(20).all()
+    return render_template("importar.html", lotes=lotes, hojas=importador.HOJAS, json=__import__("json"),
+                           resumen_txt=importador.resumen_txt)
+
+
+@app.route("/importar/plantilla.xlsx")
+@rol_requerido("admin")
+def importar_plantilla():
+    ej = request.args.get("ejemplo") == "1"
+    return Response(importador.plantilla(ejemplo=ej),
+                    mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename="
+                             + ("Ejemplo_importacion_CalzadoControl.xlsx" if ej else "Plantilla_importacion_CalzadoControl.xlsx")})
+
+
+@app.route("/importar/<int:id>")
+@rol_requerido("admin")
+def importar_revision(id):
+    import json
+    lote = _lote(id)
+    r = json.loads(lote.resumen or "{}")
+    return render_template("importar_revision.html", lote=lote, r=r,
+                           lineas=importador.resumen_txt(r.get("res", {})),
+                           titulos={k: t for k, t, *_ in importador.HOJAS})
+
+
+@app.route("/importar/<int:id>/confirmar", methods=["POST"])
+@rol_requerido("admin")
+def importar_confirmar(id):
+    lote = _lote(id)
+    if lote.estado != "revision":
+        flash("Esta importación ya se procesó.", "error")
+        return redirect(url_for("importar_revision", id=id))
+    datos, avisos = importador.leer(lote.archivo)
+    imp = importador.Importacion(datos, current_user.id, lote.fecha_saldos)
+    try:
+        ok = imp.correr()
+    except Exception as e:
+        ok = False
+        imp.errores.append(("—", "—", f"Error inesperado: {str(e)[:200]}"))
+    if not ok:
+        db.session.rollback()
+        lote = _lote(id)
+        lote.resumen = importador.a_json(dict(res=imp.res, errores=imp.errores[:500], n_errores=len(imp.errores),
+                                              avisos=avisos, filas={k: len(v) for k, v in datos.items()}))
+        db.session.commit()
+        flash("Los datos cambiaron desde la revisión y ahora hay errores. Revísalos abajo.", "error")
+        return redirect(url_for("importar_revision", id=id))
+    lote.estado = "aplicado"
+    lote.items = importador.a_json(imp.creado)
+    lote.fecha = ahora()
+    lote.resumen = importador.a_json(dict(res=imp.res, errores=[], n_errores=0, avisos=avisos,
+                                          filas={k: len(v) for k, v in datos.items()}))
+    db.session.commit()
+    flash("Importación terminada. Revisa las secciones; si algo quedó mal, puedes deshacerla desde Importar datos.", "ok")
+    return redirect(url_for("importar_revision", id=id))
+
+
+@app.route("/importar/<int:id>/deshacer", methods=["POST"])
+@rol_requerido("admin")
+def importar_deshacer(id):
+    import json
+    lote = _lote(id)
+    if lote.estado != "aplicado":
+        flash("Solo se puede deshacer una importación aplicada.", "error")
+        return redirect(url_for("importar_revision", id=id))
+    try:
+        desact = importador.deshacer(json.loads(lote.items or "[]"))
+        lote.estado = "deshecho"
+        lote.deshecho_en = ahora()
+        db.session.commit()
+        msg = "Importación deshecha."
+        if desact:
+            msg += (f" {desact} registro(s) que ya se usaron en otras operaciones quedaron inactivos en vez de borrarse.")
+        flash(msg + " Los datos que ya existían y se actualizaron conservan los valores nuevos.", "ok")
+    except ErrorNegocio as e:
+        db.session.rollback()
+        flash("No se pudo deshacer:", "error")
+        for m in e.errores[:15]:
+            flash(m, "error")
+    return redirect(url_for("importar_revision", id=id))
+
+
+@app.route("/importar/<int:id>/descartar", methods=["POST"])
+@rol_requerido("admin")
+def importar_descartar(id):
+    lote = _lote(id)
+    if lote.estado == "revision":
+        lote.estado = "descartado"
+        lote.archivo = None
+        db.session.commit()
+    return redirect(url_for("importar"))
+
+
 @app.route("/productos/existencias", methods=["GET", "POST"])
 @rol_requerido("admin")
 def producto_existencias():
@@ -1630,11 +1786,12 @@ def ventas():
         q = q.filter(Venta.condicion == cond)
     items = q.order_by(Venta.fecha.desc()).all()
     validas = [v for v in items if not v.anulada]
+    reales = [v for v in validas if not v.es_saldo_inicial]
     return render_template("ventas.html", items=items, desde=desde, hasta=hasta, cond=cond,
-                           total=sum(v.total for v in validas),
-                           ganancia=sum(v.ganancia for v in validas),
+                           total=sum(v.total for v in reales),
+                           ganancia=sum(v.ganancia for v in reales),
                            saldo=sum(v.saldo for v in validas),
-                           unidades=sum(v.unidades for v in validas))
+                           unidades=sum(v.unidades for v in reales))
 
 
 @app.route("/ventas/nueva", methods=["GET", "POST"])
@@ -2221,7 +2378,7 @@ def _cargar_demo_en_segundo_plano(eid, admin_id):
 
 
 # Orden de borrado (primero los hijos) para vaciar los datos de una empresa
-ORDEN_BORRADO = ["AjusteItem", "Ajuste", "DevolucionItem", "Devolucion", "Abono", "VentaItem", "Venta",
+ORDEN_BORRADO = ["ImportLote", "AjusteItem", "Ajuste", "DevolucionItem", "Devolucion", "Abono", "VentaItem", "Venta",
                  "ProduccionMO", "PagoNomina", "ProduccionConsumo", "ProduccionTalla", "Produccion",
                  "PreparacionConsumo", "Preparacion", "CompraInsumo", "RecetaItem", "ProcesoTarifa", "ProductoTalla",
                  "Producto", "PrepRecetaItem", "Insumo", "Empleado", "Cliente", "Gasto", "Activo"]
@@ -2398,6 +2555,7 @@ def migrar_columnas():
     nuevas = [("cz_usuarios", "empresa_id", "INTEGER"),
               ("cz_usuarios", "intentos_fallidos", "INTEGER NOT NULL DEFAULT 0"),
               ("cz_producciones", "es_inicial", "BOOLEAN NOT NULL DEFAULT FALSE"),
+              ("cz_ventas", "origen", "VARCHAR(20)"),
               ("cz_usuarios", "bloqueado_hasta", "TIMESTAMP"), ("cz_ventas", "consecutivo", "INTEGER"),
               ("cz_ajustes", "consecutivo", "INTEGER"), ("cz_nomina", "consecutivo", "INTEGER"),
               ("cz_negocio", "logo", "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"),

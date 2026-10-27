@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func
 
-from models import Venta, VentaItem, ahora, db
+from models import Venta, VentaItem, ahora, db, venta_real
 
 ESTADOS = {
     "activo": ("Activo", "ok"),
@@ -52,7 +52,7 @@ def metricas(clientes, hoy):
     total = _pares_por_cliente()
     resumen = {cid: (n, first, last) for cid, n, first, last in (
         db.session.query(Venta.cliente_id, func.count(Venta.id), func.min(Venta.fecha), func.max(Venta.fecha))
-        .filter(Venta.anulada.is_(False), Venta.cliente_id.isnot(None))
+        .filter(Venta.anulada.is_(False), venta_real(), Venta.cliente_id.isnot(None))
         .group_by(Venta.cliente_id).all())}
     cart = cartera_por_cliente()
 

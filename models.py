@@ -640,6 +640,9 @@ class Venta(EmpresaMixin, db.Model):
     ganancia = db.Column(db.Float, nullable=False, default=0)
     anulada = db.Column(db.Boolean, nullable=False, default=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey("cz_usuarios.id"))
+    # Vacío = venta normal. "historica": importada de Excel, cuenta en reportes pero no movió
+    # inventario. "saldo_inicial": deuda que ya existía al empezar; solo cuenta en cartera.
+    origen = db.Column(db.String(20))
 
     usuario = db.relationship("Usuario", lazy="joined")
     items = db.relationship(
@@ -652,6 +655,10 @@ class Venta(EmpresaMixin, db.Model):
     @property
     def unidades(self):
         return sum(i.cantidad for i in self.items)
+
+    @property
+    def es_saldo_inicial(self):
+        return self.origen == "saldo_inicial"
 
     @property
     def subtotal(self):
@@ -948,3 +955,26 @@ class AjusteItem(EmpresaMixin, db.Model):
     @property
     def unidad(self):
         return self.insumo.unidad if self.insumo else "pares"
+
+
+def venta_real():
+    """Filtro: ventas que cuentan como ingreso (excluye saldos de cartera importados)."""
+    return db.func.coalesce(Venta.origen, "") != "saldo_inicial"
+
+
+# -------------------------------------------------------------- importación
+class ImportLote(EmpresaMixin, db.Model):
+    """Un archivo de Excel importado. Guarda lo que creó para poder deshacerlo."""
+    __tablename__ = "cz_importaciones"
+    id = db.Column(db.Integer, primary_key=True)
+    fecha = db.Column(db.DateTime, nullable=False, default=ahora)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("cz_usuarios.id"))
+    archivo_nombre = db.Column(db.String(160))
+    archivo = db.Column(db.LargeBinary)
+    fecha_saldos = db.Column(db.Date)
+    estado = db.Column(db.String(20), nullable=False, default="revision")  # revision|aplicado|deshecho|descartado
+    resumen = db.Column(db.Text)  # JSON
+    items = db.Column(db.Text)  # JSON: lo creado, para deshacer
+    deshecho_en = db.Column(db.DateTime)
+
+    usuario = db.relationship("Usuario", lazy="joined")

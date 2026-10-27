@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <div><h1>Referencias de calzado</h1><p>{{ total_pares|num }} pares en bodega · valorizados en {{ valor|cop }}</p></div>
-  <div class="actions"><a class="btn sec" href="{{ url_for('ajuste_nuevo') }}">⇡ Egreso / ajuste</a>{% if puede('admin') %}<a class="btn sec" href="{{ url_for('producto_existencias') }}">⇣ Cargar existencias</a><a class="btn" href="{{ url_for('producto_form') }}">＋ Nueva referencia</a>{% endif %}</div>
+  <div class="actions"><a class="btn sec" href="{{ url_for('ajuste_nuevo') }}">⇡ Egreso / ajuste</a>{% if puede('admin') %}<a class="btn sec" href="{{ url_for('producto_existencias') }}">⇣ Cargar existencias</a><a class="btn sec" href="{{ url_for('importar') }}">⇪ Importar Excel</a><a class="btn" href="{{ url_for('producto_form') }}">＋ Nueva referencia</a>{% endif %}</div>
 </div>
 <div class="card">
   <div class="card-head">

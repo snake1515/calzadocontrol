@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Importar datos{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Importar datos desde Excel</h1>
+    <p>Para empresas que ya llevan su información en Excel: sube materiales, referencias, existencias, clientes, cartera y más en un solo archivo.</p></div>
+  <a class="btn sec" href="{{ url_for('negocio') }}">← Datos del negocio</a>
+</div>
+<div class="grid g-main">
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><h2><span class="paso">1</span> Descarga la plantilla</h2></div>
+      <p class="hint" style="margin-top:0">Trae una hoja por sección, con listas desplegables y una fila gris de ayuda. Copia y pega desde tus Excel a partir de la fila 3. Llena solo las hojas que necesites.</p>
+      <div class="actions">
+        <a class="btn" href="{{ url_for('importar_plantilla') }}">⇣ Plantilla vacía</a>
+        <a class="btn sec" href="{{ url_for('importar_plantilla', ejemplo=1) }}">⇣ Ejemplo lleno</a>
+      </div>
+      <div class="hojas-imp">
+        {% for k, titulo, desc, cols in hojas %}
+        <div><b>{{ loop.index }}. {{ titulo }}</b><small>{{ desc }}</small></div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2><span class="paso">2</span> Sube tu archivo</h2></div>
+      <form method="post" enctype="multipart/form-data" id="fu">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label>Archivo de Excel (.xlsx)</label>
+          <input class="input" type="file" name="archivo" accept=".xlsx,.xlsm" required></div>
+        <div class="field" style="max-width:260px"><label>Fecha de las existencias y saldos</label>
+          <input class="input" type="date" name="fecha" value="{{ hoy }}" max="{{ hoy }}">
+          <small class="hint">El día en que contaste la bodega.</small></div>
+        <button class="btn" id="go">Revisar archivo →</button>
+        <p class="hint" style="margin:10px 0 0">Todavía no se guarda nada: primero verás una revisión con lo que se va a crear y los errores fila por fila.</p>
+      </form>
+    </div>
+  </div>
+  <div class="card summary">
+    <h2>Importaciones</h2>
+    {% for l in lotes %}{% set r = json.loads(l.resumen or '{}') %}
+      <a class="lote" href="{{ url_for('importar_revision', id=l.id) }}">
+        <div><b>{{ l.archivo_nombre }}</b>
+          {% if l.estado == 'aplicado' %}<span class="badge ok">Importado</span>
+          {% elif l.estado == 'deshecho' %}<span class="badge gray">Deshecho</span>
+          {% elif l.estado == 'descartado' %}<span class="badge gray">Descartado</span>
+          {% elif r.n_errores %}<span class="badge err">{{ r.n_errores }} errores</span>
+          {% else %}<span class="badge warn">Sin confirmar</span>{% endif %}</div>
+        <small>{{ l.fecha|fecha(True) }}{% if l.usuario %} · {{ l.usuario.nombre }}{% endif %}</small>
+      </a>
+    {% else %}
+      <p class="hint">Aún no has importado nada.</p>
+    {% endfor %}
+    <div class="note" style="margin-top:12px">Si algo ya existe (mismo código de referencia, mismo material, mismo cliente) se <b>actualiza</b>, no se duplica. Las cantidades de bodega se <b>suman</b>. Cada importación se puede <b>deshacer</b>.</div>
+  </div>
+</div>
+<style>
+  .paso{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px;margin-right:6px}
+  .hojas-imp{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-top:16px}
+  .hojas-imp div{background:var(--bg);border-radius:10px;padding:9px 11px}
+  .hojas-imp b{display:block;font-size:13px} .hojas-imp small{color:var(--muted);font-size:12px;line-height:1.35;display:block;margin-top:2px}
+  .lote{display:block;padding:10px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none}
+  .lote div{display:flex;justify-content:space-between;gap:8px;align-items:center} .lote b{font-size:13px;word-break:break-all}
+  .lote small{color:var(--muted)}
+</style>
+{% endblock %}
+{% block scripts %}
+<script>document.getElementById('fu').addEventListener('submit', () => { const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Revisando…'; });</script>
+{% endblock %}

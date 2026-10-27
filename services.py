@@ -273,7 +273,7 @@ def _recalcular_venta(v, costo=None):
 def anular_venta(venta):
     if venta.anulada:
         raise ErrorNegocio("Esta venta ya estaba anulada.")
-    for it in venta.items:
+    for it in venta.items if not venta.origen else []:  # las importadas no movieron inventario
         p = it.producto
         p.costo_promedio = promedio_ponderado(p.stock, p.costo_promedio, it.cantidad, it.costo_unitario)
         mover_talla(p, it.talla or 0, it.cantidad)
@@ -301,6 +301,8 @@ def devolver_parcial(venta, cantidades, motivo="", usuario_id=None):
     """cantidades: {VentaItem: pares que devuelve}. Regresan a su talla y la venta se ajusta."""
     if venta.anulada:
         raise ErrorNegocio("Esta venta está anulada; no admite devoluciones.")
+    if venta.origen:
+        raise ErrorNegocio("Esta venta se importó de Excel y no movió inventario; no admite devoluciones.")
     cantidades = {it: c for it, c in cantidades.items() if c > 0}
     if not cantidades:
         raise ErrorNegocio("Indica cuántos pares devuelve el cliente.")

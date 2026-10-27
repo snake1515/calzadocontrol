@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Datos del negocio{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Datos del negocio</h1><p>Lo que aparece en el encabezado de cada recibo de venta, egreso y desprendible de nómina.</p></div></div>
+<div class="page-head"><div><h1>Datos del negocio</h1><p>Lo que aparece en el encabezado de cada recibo de venta, egreso y desprendible de nómina.</p></div>
+  <div class="actions"><a class="btn sec" href="{{ url_for('importar') }}">⇪ Importar datos desde Excel</a></div></div>
 <div class="grid g-main">
   <div class="card">
     <form method="post" enctype="multipart/form-data">

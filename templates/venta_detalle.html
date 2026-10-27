@@ -3,7 +3,7 @@
 {% block content %}
 {% set est = v.estado_pago %}
 <div class="page-head">
-  <div><h1>Venta {{ num_doc(v) }} <span class="badge {{ est[1] }}">{{ est[0] }}</span></h1>
+  <div><h1>Venta {{ num_doc(v) }} <span class="badge {{ est[1] }}">{{ est[0] }}</span>{% if v.origen == 'saldo_inicial' %} <span class="badge gray">Saldo anterior</span>{% elif v.origen == 'historica' %} <span class="badge gray">Histórica</span>{% endif %}</h1>
     <p>{{ v.fecha|fecha(True) }} · {{ 'Crédito, vence ' ~ (v.vence|fecha) if v.condicion == 'credito' else 'Contado · ' ~ v.metodo_pago }}{% if v.cliente_id %} · <a href="{{ url_for('cliente_detalle', id=v.cliente_id) }}">{{ v.cliente }}</a>{% elif v.cliente %} · {{ v.cliente }}{% endif %}{% if v.cliente_doc %} (C.C./NIT {{ v.cliente_doc }}){% endif %}{% if v.usuario %} · vendió {{ v.usuario.nombre }}{% endif %}</p></div>
   <div class="actions"><a class="btn sec" href="{{ url_for('ventas') }}">← Ventas</a><a class="btn" href="{{ url_for('venta_nueva') }}">＋ Nueva venta</a></div>
 </div>
@@ -22,7 +22,7 @@
     <div class="card">
       <div class="table-wrap"><table>
         <thead><tr><th>Referencia</th><th>Talla</th><th class="num">Pares</th><th class="num">Precio</th><th class="num">Subtotal</th>{% if puede('admin') %}<th class="num">Costo</th><th class="num">Ganancia</th>{% endif %}</tr></thead>
-        <tbody>{% for it in v.items %}
+        <tbody>{% if v.origen == 'saldo_inicial' %}<tr><td colspan="7" class="empty">Saldo que el cliente ya debía al empezar a usar la app (importado de Excel). Se cobra con abonos como cualquier venta a crédito.</td></tr>{% endif %}{% for it in v.items %}
           <tr><td>{{ it.producto.etiqueta }}</td><td>{{ it.talla }}</td><td class="num">{{ it.cantidad }}</td><td class="num">{{ it.precio_unitario|cop }}</td><td class="num">{{ it.subtotal|cop }}</td>
           {% if puede('admin') %}<td class="num">{{ it.costo|cop }}</td><td class="num {{ 'pos' if it.subtotal >= it.costo else 'neg' }}">{{ (it.subtotal - it.costo)|cop }}</td>{% endif %}</tr>
         {% endfor %}</tbody>
@@ -37,8 +37,8 @@
       {% endif %}
       {% if puede('admin') and not v.anulada %}
       <div class="actions" style="margin-top:16px">
-        <button type="button" class="btn sec sm" id="abrirDev">↩ Devolución parcial</button>
-        <form method="post" action="{{ url_for('venta_anular', id=v.id) }}" onsubmit="return confirm('¿Anular esta venta? Los pares vuelven al inventario{{ ' y los abonos quedan anulados' if v.abonos }}.')">
+        {% if not v.origen %}<button type="button" class="btn sec sm" id="abrirDev">↩ Devolución parcial</button>{% endif %}
+        <form method="post" action="{{ url_for('venta_anular', id=v.id) }}" onsubmit="return confirm('¿Anular esta venta?{{ "" if v.origen else " Los pares vuelven al inventario" }}{{ ' y los abonos quedan anulados' if v.abonos }}.')">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger sm">Anular venta</button>
         </form>
       </div>

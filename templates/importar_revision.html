@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Revisión de importación{% endblock %}
+{% block content %}
+{% set errs = r.get('errores', []) %}
+<div class="page-head">
+  <div><h1>{% if lote.estado == 'revision' %}Revisión antes de importar{% else %}Importación{% endif %}
+      {% if lote.estado == 'aplicado' %}<span class="badge ok">Importado</span>{% elif lote.estado == 'deshecho' %}<span class="badge gray">Deshecho</span>{% elif lote.estado == 'descartado' %}<span class="badge gray">Descartado</span>{% elif errs %}<span class="badge err">Con errores</span>{% else %}<span class="badge ok">Listo para importar</span>{% endif %}</h1>
+    <p>{{ lote.archivo_nombre }} · {{ lote.fecha|fecha(True) }}{% if lote.usuario %} · {{ lote.usuario.nombre }}{% endif %}{% if lote.fecha_saldos %} · existencias y saldos al {{ lote.fecha_saldos|fecha }}{% endif %}</p></div>
+  <a class="btn sec" href="{{ url_for('importar') }}">← Importar datos</a>
+</div>
+{% for a in r.get('avisos', []) %}<div class="note warn" style="margin-bottom:10px">{{ a }}</div>{% endfor %}
+<div class="grid g-main">
+  <div>
+    {% if errs %}
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><h2>Corrige estos {{ r.n_errores }} errores en tu Excel</h2></div>
+      <p class="hint" style="margin-top:0">Mientras haya errores no se guarda nada. Corrige el archivo y vuelve a subirlo.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Hoja</th><th class="num">Fila</th><th>Qué pasa</th></tr></thead>
+        <tbody>{% for h, f, m in errs %}<tr><td style="white-space:nowrap"><b>{{ h }}</b></td><td class="num">{{ f }}</td><td>{{ m }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% if r.n_errores > errs|length %}<p class="hint">Se muestran los primeros {{ errs|length }}.</p>{% endif %}
+    </div>
+    {% endif %}
+    <div class="card">
+      <div class="card-head"><h2>{% if lote.estado == 'aplicado' or lote.estado == 'deshecho' %}Lo que se importó{% else %}Lo que se va a importar{% endif %}</h2></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Hoja</th><th class="num">Filas leídas</th><th>Resultado</th></tr></thead>
+        <tbody>
+        {% set dl = dict(lineas) %}
+        {% for k, n in r.get('filas', {}).items() %}
+          <tr><td><b>{{ titulos.get(k, k) }}</b></td><td class="num">{{ n }}</td><td>{{ dl.get(titulos.get(k, k), '—') }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  <div class="card summary">
+    {% if lote.estado == 'revision' %}
+      {% if not errs %}
+        <h2>Todo en orden</h2>
+        <p class="hint">Se revisaron todas las filas y no hay errores. Al confirmar se guarda todo de una vez.</p>
+        <form method="post" action="{{ url_for('importar_confirmar', id=lote.id) }}" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Importando…'">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn block">✓ Confirmar e importar</button>
+        </form>
+      {% else %}
+        <h2>No se puede importar todavía</h2>
+        <p class="hint">Corrige los errores en tu Excel y súbelo de nuevo desde <a href="{{ url_for('importar') }}">Importar datos</a>.</p>
+      {% endif %}
+      <form method="post" action="{{ url_for('importar_descartar', id=lote.id) }}" style="margin-top:10px">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn sec block">Descartar este archivo</button>
+      </form>
+    {% elif lote.estado == 'aplicado' %}
+      <h2>Importación aplicada</h2>
+      <p class="hint">Revisa Referencias, Materiales, Clientes y Cartera. Si algo quedó mal puedes deshacer todo lo que creó este archivo.</p>
+      <div class="actions" style="flex-direction:column;align-items:stretch">
+        <a class="btn sec" href="{{ url_for('productos') }}">Ver referencias</a>
+        <a class="btn sec" href="{{ url_for('insumos') }}">Ver materiales</a>
+        <a class="btn sec" href="{{ url_for('cartera') }}">Ver cartera</a>
+      </div>
+      <form method="post" action="{{ url_for('importar_deshacer', id=lote.id) }}" style="margin-top:14px"
+            onsubmit="return confirm('¿Deshacer esta importación? Se borra lo que creó este archivo y se restan las existencias que sumó.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn danger block">↶ Deshacer importación</button>
+      </form>
+      <p class="hint" style="margin-top:8px">No se puede deshacer si ya se vendieron pares importados o se registraron abonos a la cartera importada; la app te dirá cuáles.</p>
+    {% elif lote.estado == 'deshecho' %}
+      <h2>Importación deshecha</h2>
+      <p class="hint">El {{ lote.deshecho_en|fecha(True) }} se revirtió lo que creó este archivo.</p>
+    {% else %}
+      <h2>Archivo descartado</h2>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
