@@ -222,6 +222,10 @@ def contexto_empresa():
         return redirect(url_for("login"))
     set_empresa(emp.id)
     g.empresa = emp
+    ahora_ = ahora()
+    if not current_user.ultimo_uso or ahora_ - current_user.ultimo_uso > timedelta(minutes=5):
+        current_user.ultimo_uso = ahora_  # para que SoftGest vea quién está usando la demo
+        db.session.commit()
     if emp.bloqueada and ep not in LIBRES:
         return redirect(url_for("bloqueado"))
     if ep.startswith("sg_"):
@@ -394,6 +398,9 @@ def login():
             return render_template("login.html")
         if u and u.activo and u.check_password(request.form.get("password", "")):
             u.intentos_fallidos, u.bloqueado_hasta = 0, None
+            if u.rol != "superadmin":
+                u.ultimo_ingreso = u.ultimo_uso = momento
+                u.ingresos = (u.ingresos or 0) + 1
             db.session.commit()
             session.clear()  # sesión nueva al entrar (evita fijación de sesión)
             login_user(u, remember=bool(request.form.get("recordar")))
@@ -2396,6 +2403,28 @@ def vaciar_empresa(eid):
     db.session.commit()
 
 
+def hace(dt):
+    """«hace 3 h», «hace 2 días»… para el panel de SoftGest."""
+    if not dt:
+        return "Nunca ha entrado"
+    s = (ahora() - dt).total_seconds()
+    if s < 600:
+        return "Ahora mismo"
+    if s < 3600:
+        return f"Hace {int(s // 60)} min"
+    if s < 86400:
+        return f"Hace {int(s // 3600)} h"
+    d = int(s // 86400)
+    return "Ayer" if d == 1 else f"Hace {d} días"
+
+
+def clase_uso(dt):
+    if not dt:
+        return "gray"
+    d = (ahora() - dt).total_seconds() / 86400
+    return "ok" if d < 1 else ("warn" if d < 4 else "err")
+
+
 def _resumen_empresas():
     """Datos de uso de cada empresa (sin filtro de empresa)."""
     def por_empresa(q):
@@ -2404,7 +2433,12 @@ def _resumen_empresas():
     nventas = por_empresa(db.session.query(Venta.empresa_id, func.count(Venta.id)).group_by(Venta.empresa_id))
     nprod = por_empresa(db.session.query(Producto.empresa_id, func.count(Producto.id)).group_by(Producto.empresa_id))
     nusers = dict(db.session.query(Usuario.empresa_id, func.count(Usuario.id)).group_by(Usuario.empresa_id).all())
-    return ultima, nventas, nprod, nusers
+    uso = {}  # empresa -> (último uso, usuario, total de ingresos)
+    for u in Usuario.query.filter(Usuario.empresa_id.isnot(None)).all():
+        a = uso.get(u.empresa_id, (None, None, 0))
+        mejor = (u.ultimo_uso, u) if u.ultimo_uso and (not a[0] or u.ultimo_uso > a[0]) else (a[0], a[1])
+        uso[u.empresa_id] = (mejor[0], mejor[1], a[2] + (u.ingresos or 0))
+    return ultima, nventas, nprod, nusers, uso
 
 
 @app.route("/softgest")
@@ -2413,12 +2447,12 @@ def sg_panel():
     session.pop("soporte_empresa", None)
     set_empresa(None)
     empresas = Empresa.query.order_by(Empresa.creado.desc()).all()
-    ultima, nventas, nprod, nusers = _resumen_empresas()
+    ultima, nventas, nprod, nusers, uso = _resumen_empresas()
     admins = {}
     for u in Usuario.query.filter(Usuario.rol == "admin").order_by(Usuario.id).all():
         admins.setdefault(u.empresa_id, u)
     return render_template("sg_panel.html", empresas=empresas, ultima=ultima, nventas=nventas, nprod=nprod,
-                           nusers=nusers, admins=admins,
+                           nusers=nusers, admins=admins, uso=uso, hace=hace, clase_uso=clase_uso,
                            cuenta={k: sum(1 for e in empresas if e.estado == k) for k in ESTADOS_EMPRESA},
                            vencidas=sum(1 for e in empresas if e.bloqueada and e.estado != "suspendida"))
 
@@ -2518,8 +2552,8 @@ def sg_empresa(id):
         db.session.commit()
         return redirect(url_for("sg_empresa", id=id))
     usuarios = Usuario.query.filter_by(empresa_id=id).order_by(Usuario.rol, Usuario.nombre).all()
-    ultima, nventas, nprod, nusers = _resumen_empresas()
-    return render_template("sg_empresa.html", e=e, estados=ESTADOS_EMPRESA, usuarios=usuarios, f=f,
+    ultima, nventas, nprod, nusers, _ = _resumen_empresas()
+    return render_template("sg_empresa.html", e=e, estados=ESTADOS_EMPRESA, usuarios=usuarios, f=f, hace=hace,
                            uso=dict(ultima=ultima.get(id), ventas=nventas.get(id, 0), refs=nprod.get(id, 0)))
 
 
@@ -2556,6 +2590,9 @@ def migrar_columnas():
               ("cz_usuarios", "intentos_fallidos", "INTEGER NOT NULL DEFAULT 0"),
               ("cz_producciones", "es_inicial", "BOOLEAN NOT NULL DEFAULT FALSE"),
               ("cz_ventas", "origen", "VARCHAR(20)"),
+              ("cz_usuarios", "ultimo_ingreso", "TIMESTAMP"),
+              ("cz_usuarios", "ultimo_uso", "TIMESTAMP"),
+              ("cz_usuarios", "ingresos", "INTEGER NOT NULL DEFAULT 0"),
               ("cz_usuarios", "bloqueado_hasta", "TIMESTAMP"), ("cz_ventas", "consecutivo", "INTEGER"),
               ("cz_ajustes", "consecutivo", "INTEGER"), ("cz_nomina", "consecutivo", "INTEGER"),
               ("cz_negocio", "logo", "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"),

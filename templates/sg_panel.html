@@ -13,7 +13,7 @@
 </div>
 <div class="card">
   <div class="table-wrap"><table>
-    <thead><tr><th>Empresa</th><th>Estado</th><th>Usuario admin</th><th class="num">Referencias</th><th class="num">Ventas</th><th>Última venta</th><th></th></tr></thead>
+    <thead><tr><th>Empresa</th><th>Estado</th><th>Usuario admin</th><th class="num">Referencias</th><th>Último uso</th><th class="num">Ventas</th><th>Última venta</th><th></th></tr></thead>
     <tbody>
     {% for e in empresas %}{% set st = e.estado_txt %}
       <tr>
@@ -21,6 +21,9 @@
         <td><span class="badge {{ st[1] }}">{{ st[0] }}</span>{% if e.demo_cargando %}<br><span class="badge gray">Cargando datos demo…</span>{% endif %}</td>
         <td><code>{{ admins[e.id].username if e.id in admins else '—' }}</code><br><small class="muted">{{ nusers.get(e.id, 0) }} usuario(s)</small></td>
         <td class="num">{{ nprod.get(e.id, 0) }}</td>
+        {% set us = uso.get(e.id, (None, None, 0)) %}
+        <td style="white-space:nowrap"><span class="badge {{ clase_uso(us[0]) }}">{{ hace(us[0]) }}</span>
+          {% if us[1] %}<br><small class="muted">{{ us[1].username }} · {{ us[2] }} ingreso{{ 's' if us[2] != 1 }}</small>{% endif %}</td>
         <td class="num">{{ nventas.get(e.id, 0) }}</td>
         <td>{{ ultima[e.id]|fecha if ultima.get(e.id) else '—' }}</td>
         <td class="r" style="white-space:nowrap">
@@ -28,7 +31,7 @@
           <form method="post" action="{{ url_for('sg_entrar', id=e.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn sm">Entrar</button></form>
         </td>
       </tr>
-    {% else %}<tr><td colspan="7" class="empty">Aún no hay empresas. Crea la primera demo para un cliente.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="8" class="empty">Aún no hay empresas. Crea la primera demo para un cliente.</td></tr>{% endfor %}
     </tbody>
   </table></div>
   <p class="hint" style="margin-top:10px"><b>Entrar</b> te lleva dentro de la empresa como administrador para darle soporte o mostrarle la app. Para salir usa «Volver al panel».</p>

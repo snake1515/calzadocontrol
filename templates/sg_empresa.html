@@ -51,8 +51,9 @@
     <div class="card">
       <div class="card-head"><h2>Usuarios</h2></div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th></tr></thead>
-        <tbody>{% for u in usuarios %}<tr><td>{{ u.nombre }}</td><td><code>{{ u.username }}</code></td><td>{{ u.rol_nombre }}</td><td>{{ 'Activo' if u.activo else 'Inactivo' }}</td></tr>{% endfor %}</tbody>
+        <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último uso</th><th class="num">Ingresos</th></tr></thead>
+        <tbody>{% for u in usuarios %}<tr><td>{{ u.nombre }}</td><td><code>{{ u.username }}</code></td><td>{{ u.rol_nombre }}</td><td>{{ 'Activo' if u.activo else 'Inactivo' }}</td>
+          <td style="white-space:nowrap">{{ hace(u.ultimo_uso) }}{% if u.ultimo_uso %}<br><small class="muted">{{ u.ultimo_uso|fecha(True) }}</small>{% endif %}</td><td class="num">{{ u.ingresos or 0 }}</td></tr>{% endfor %}</tbody>
       </table></div>
       <form method="post" style="margin-top:12px;background:var(--bg);border-radius:10px;padding:12px">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="accion" value="clave">

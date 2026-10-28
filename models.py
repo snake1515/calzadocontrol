@@ -165,6 +165,9 @@ class Usuario(UserMixin, db.Model):
     creado = db.Column(db.DateTime, default=ahora)
     intentos_fallidos = db.Column(db.Integer, nullable=False, default=0)
     bloqueado_hasta = db.Column(db.DateTime)  # tras 5 claves erradas seguidas, 15 minutos
+    ultimo_ingreso = db.Column(db.DateTime)  # último inicio de sesión
+    ultimo_uso = db.Column(db.DateTime)  # última vez que abrió una pantalla (se anota cada 5 min)
+    ingresos = db.Column(db.Integer, nullable=False, default=0)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
