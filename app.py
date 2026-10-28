@@ -8,7 +8,7 @@ from functools import wraps
 from urllib.parse import quote
 
 from dotenv import load_dotenv
-from flask import (Flask, Response, abort, flash, g, redirect, render_template,
+from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template,
                    request, send_file, session, url_for)
 from flask_login import (LoginManager, current_user, login_required,
                          login_user, logout_user)
@@ -196,7 +196,7 @@ def cabeceras_seguridad(resp):
 
 
 # Rutas que se pueden usar sin empresa activa o con la empresa bloqueada
-LIBRES = {"static", "login", "logout", "cuenta", "bloqueado", "logo"}
+LIBRES = {"static", "login", "logout", "cuenta", "bloqueado", "logo", "salud"}
 
 
 @app.before_request
@@ -1988,6 +1988,15 @@ def _procesar_logo(data):
     buf = io.BytesIO()
     lienzo.save(buf, "JPEG", quality=90)
     return buf.getvalue()
+
+
+@app.route("/salud")
+def salud():
+    """Respuesta liviana para despertar la app (la usa la página de entrada de softgestapps.com)."""
+    r = jsonify(ok=True)
+    r.headers["Access-Control-Allow-Origin"] = "*"
+    r.headers["Cache-Control"] = "no-store"
+    return r
 
 
 @app.route("/logo.jpg")
